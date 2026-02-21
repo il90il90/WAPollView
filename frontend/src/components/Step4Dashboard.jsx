@@ -96,13 +96,12 @@ const ANIMATED_TEMPLATES = [
   { key: "bigscreen", label: "Big Screen", icon: "🖥️" },
 ];
 
-function TemplateClassic({ votes, chartData, totalVotes, COLORS: colors, uniqueVoters, isMultiSelect }) {
-  const denominator = isMultiSelect ? (uniqueVoters || 1) : (totalVotes || 1);
+function TemplateClassic({ votes, chartData, totalVotes, COLORS: colors, uniqueVoters, isMultiSelect, pctBase }) {
   return (
     <div className="space-y-4">
       <div className="card p-4 space-y-3">
         {votes.map((v, idx) => {
-          const pct = denominator > 0 ? (v.count / denominator) * 100 : 0;
+          const pct = pctBase > 0 ? (v.count / pctBase) * 100 : 0;
           const voters = v.voters || [];
           return (
             <div key={v.optionId || idx} className="space-y-1.5">
@@ -160,7 +159,7 @@ function TemplateClassic({ votes, chartData, totalVotes, COLORS: colors, uniqueV
   );
 }
 
-function TemplatePie({ chartData, totalVotes, COLORS: colors }) {
+function TemplatePie({ chartData, totalVotes, COLORS: colors, uniqueVoters, isMultiSelect, pctBase }) {
   const pieData = chartData.filter((d) => d.votes > 0).map((d, i) => ({ ...d, fill: colors[i % colors.length] }));
   if (pieData.length === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
   return (
@@ -177,7 +176,10 @@ function TemplatePie({ chartData, totalVotes, COLORS: colors }) {
             outerRadius={130}
             paddingAngle={3}
             animationDuration={800}
-            label={({ fullName, votes, percent }) => `${fullName} (${(percent * 100).toFixed(0)}%)`}
+            label={({ fullName, votes: v }) => {
+              const p = pctBase > 0 ? ((v / pctBase) * 100).toFixed(0) : 0;
+              return `${fullName} (${p}%)`;
+            }}
             labelLine={{ stroke: "#6B7280" }}
           >
             {pieData.map((entry, idx) => (<Cell key={idx} fill={entry.fill} />))}
@@ -185,8 +187,8 @@ function TemplatePie({ chartData, totalVotes, COLORS: colors }) {
           <Tooltip contentStyle={{ background: "#1F2937", border: "1px solid #374151", borderRadius: "12px", color: "#F9FAFB", fontSize: "12px" }} formatter={(value) => [`${value} votes`]} />
         </PieChart>
       </ResponsiveContainer>
-      <p className="text-center text-3xl font-black text-white mt-2">{totalVotes}</p>
-      <p className="text-center text-xs text-gray-500">Total Votes</p>
+      <p className="text-center text-3xl font-black text-white mt-2">{isMultiSelect ? uniqueVoters : totalVotes}</p>
+      <p className="text-center text-xs text-gray-500">{isMultiSelect ? `Voters (${totalVotes} selections)` : "Total Votes"}</p>
     </div>
   );
 }
@@ -230,7 +232,7 @@ function TemplateRadial({ chartData, totalVotes, COLORS: colors }) {
   );
 }
 
-function TemplateRace({ votes, totalVotes, COLORS: colors }) {
+function TemplateRace({ votes, totalVotes, COLORS: colors, pctBase }) {
   const sorted = [...votes].sort((a, b) => b.count - a.count);
   if (sorted.length === 0 || totalVotes === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
   const max = sorted[0].count;
@@ -239,7 +241,7 @@ function TemplateRace({ votes, totalVotes, COLORS: colors }) {
       {sorted.map((v, idx) => {
         const origIdx = votes.indexOf(v);
         const pct = max > 0 ? (v.count / max) * 100 : 0;
-        const votePct = totalVotes > 0 ? (v.count / totalVotes) * 100 : 0;
+        const votePct = pctBase > 0 ? (v.count / pctBase) * 100 : 0;
         return (
           <div key={v.optionId || idx} className="space-y-1">
             <div className="flex items-center justify-between">
@@ -261,7 +263,7 @@ function TemplateRace({ votes, totalVotes, COLORS: colors }) {
   );
 }
 
-function TemplatePodium({ votes, totalVotes, COLORS: colors }) {
+function TemplatePodium({ votes, totalVotes, COLORS: colors, pctBase }) {
   const sorted = [...votes].filter((v) => v.count > 0).sort((a, b) => b.count - a.count);
   if (sorted.length === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
   const top3 = sorted.slice(0, 3);
@@ -278,7 +280,7 @@ function TemplatePodium({ votes, totalVotes, COLORS: colors }) {
           const v = top3[rank];
           if (!v) return null;
           const origIdx = votes.indexOf(v);
-          const pct = totalVotes > 0 ? (v.count / totalVotes) * 100 : 0;
+          const pct = pctBase > 0 ? (v.count / pctBase) * 100 : 0;
           return (
             <div key={v.optionId || rank} className="flex flex-col items-center" style={{ width: top3.length <= 2 ? "40%" : "30%" }}>
               <span className="text-3xl md:text-4xl mb-2">{medals[rank]}</span>
@@ -298,7 +300,7 @@ function TemplatePodium({ votes, totalVotes, COLORS: colors }) {
         <div className="space-y-2 border-t border-gray-800 pt-4">
           {rest.map((v, i) => {
             const origIdx = votes.indexOf(v);
-            const pct = totalVotes > 0 ? (v.count / totalVotes) * 100 : 0;
+            const pct = pctBase > 0 ? (v.count / pctBase) * 100 : 0;
             return (
               <div key={v.optionId || i} className="flex items-center gap-3 px-2">
                 <span className="text-gray-500 font-bold text-sm w-6 text-right">{i + 4}</span>
@@ -315,7 +317,7 @@ function TemplatePodium({ votes, totalVotes, COLORS: colors }) {
   );
 }
 
-function TemplateBattle({ votes, totalVotes, COLORS: colors }) {
+function TemplateBattle({ votes, totalVotes, COLORS: colors, pctBase }) {
   const sorted = [...votes].sort((a, b) => b.count - a.count);
   if (sorted.length === 0 || totalVotes === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
 
@@ -324,8 +326,8 @@ function TemplateBattle({ votes, totalVotes, COLORS: colors }) {
     const b = sorted[1];
     const aIdx = votes.indexOf(a);
     const bIdx = votes.indexOf(b);
-    const aPct = totalVotes > 0 ? (a.count / totalVotes) * 100 : 0;
-    const bPct = totalVotes > 0 ? (b.count / totalVotes) * 100 : 0;
+    const aPct = pctBase > 0 ? (a.count / pctBase) * 100 : 0;
+    const bPct = pctBase > 0 ? (b.count / pctBase) * 100 : 0;
     const others = sorted.slice(2);
     return (
       <div className="space-y-4">
@@ -358,7 +360,7 @@ function TemplateBattle({ votes, totalVotes, COLORS: colors }) {
           <div className="card p-4 space-y-2">
             {others.map((v, i) => {
               const origIdx = votes.indexOf(v);
-              const pct = totalVotes > 0 ? (v.count / totalVotes) * 100 : 0;
+              const pct = pctBase > 0 ? (v.count / pctBase) * 100 : 0;
               return (
                 <div key={v.optionId || i} className="flex items-center gap-3">
                   <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: colors[origIdx % colors.length] }} />
@@ -374,15 +376,15 @@ function TemplateBattle({ votes, totalVotes, COLORS: colors }) {
     );
   }
 
-  return <TemplateRace votes={votes} totalVotes={totalVotes} COLORS={colors} />;
+  return <TemplateRace votes={votes} totalVotes={totalVotes} COLORS={colors} pctBase={pctBase} />;
 }
 
-function TemplateGauge({ votes, totalVotes, COLORS: colors }) {
+function TemplateGauge({ votes, totalVotes, COLORS: colors, pctBase }) {
   if (votes.length === 0 || totalVotes === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
       {votes.map((v, idx) => {
-        const pct = totalVotes > 0 ? (v.count / totalVotes) * 100 : 0;
+        const pct = pctBase > 0 ? (v.count / pctBase) * 100 : 0;
         const angle = (pct / 100) * 180;
         const color = colors[idx % colors.length];
         return (
@@ -410,14 +412,14 @@ function TemplateGauge({ votes, totalVotes, COLORS: colors }) {
   );
 }
 
-function TemplateBubbles({ votes, totalVotes, COLORS: colors }) {
+function TemplateBubbles({ votes, totalVotes, COLORS: colors, pctBase, isMultiSelect, uniqueVoters }) {
   if (votes.length === 0 || totalVotes === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
   const maxCount = Math.max(...votes.map((v) => v.count), 1);
   return (
     <div className="card p-6">
       <div className="flex flex-wrap items-center justify-center gap-4 min-h-[300px]">
         {votes.map((v, idx) => {
-          const pct = totalVotes > 0 ? (v.count / totalVotes) * 100 : 0;
+          const pct = pctBase > 0 ? (v.count / pctBase) * 100 : 0;
           const ratio = v.count / maxCount;
           const size = Math.max(60, Math.round(40 + ratio * 140));
           const color = colors[idx % colors.length];
@@ -441,12 +443,12 @@ function TemplateBubbles({ votes, totalVotes, COLORS: colors }) {
           );
         })}
       </div>
-      <p className="text-center text-xs text-gray-500 mt-4">{totalVotes} Total Votes</p>
+      <p className="text-center text-xs text-gray-500 mt-4">{isMultiSelect ? `${uniqueVoters} Voters · ${totalVotes} Selections` : `${totalVotes} Total Votes`}</p>
     </div>
   );
 }
 
-function TemplateNeon({ votes, totalVotes, COLORS: colors }) {
+function TemplateNeon({ votes, totalVotes, COLORS: colors, pctBase }) {
   if (votes.length === 0 || totalVotes === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
   const sorted = [...votes].sort((a, b) => b.count - a.count);
   return (
@@ -454,7 +456,7 @@ function TemplateNeon({ votes, totalVotes, COLORS: colors }) {
       {sorted.map((v, idx) => {
         const origIdx = votes.indexOf(v);
         const color = colors[origIdx % colors.length];
-        const pct = totalVotes > 0 ? (v.count / totalVotes) * 100 : 0;
+        const pct = pctBase > 0 ? (v.count / pctBase) * 100 : 0;
         const isLeader = idx === 0 && v.count > 0;
         return (
           <div
@@ -487,7 +489,7 @@ function TemplateNeon({ votes, totalVotes, COLORS: colors }) {
   );
 }
 
-function TemplateStadium({ votes, totalVotes, COLORS: colors }) {
+function TemplateStadium({ votes, totalVotes, COLORS: colors, pctBase, isMultiSelect, uniqueVoters }) {
   if (votes.length === 0 || totalVotes === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
   const sorted = [...votes].sort((a, b) => b.count - a.count);
   const leader = sorted[0];
@@ -501,7 +503,7 @@ function TemplateStadium({ votes, totalVotes, COLORS: colors }) {
           {sorted.map((v, idx) => {
             const origIdx = votes.indexOf(v);
             const color = colors[origIdx % colors.length];
-            const pct = totalVotes > 0 ? (v.count / totalVotes) * 100 : 0;
+            const pct = pctBase > 0 ? (v.count / pctBase) * 100 : 0;
             const isTop = v === leader;
             return (
               <div
@@ -521,7 +523,7 @@ function TemplateStadium({ votes, totalVotes, COLORS: colors }) {
           })}
         </div>
         <div className="border-t border-gray-800 px-4 py-2 flex items-center justify-between text-xs text-gray-500">
-          <span>{totalVotes} total votes</span>
+          <span>{isMultiSelect ? `${uniqueVoters} voters · ${totalVotes} selections` : `${totalVotes} total votes`}</span>
           <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />LIVE</span>
         </div>
       </div>
@@ -529,13 +531,13 @@ function TemplateStadium({ votes, totalVotes, COLORS: colors }) {
   );
 }
 
-function TemplateWaffle({ votes, totalVotes, COLORS: colors }) {
+function TemplateWaffle({ votes, totalVotes, COLORS: colors, pctBase, isMultiSelect, uniqueVoters }) {
   if (votes.length === 0 || totalVotes === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
   const gridSize = 100;
   const cells = [];
   let filled = 0;
   votes.forEach((v, idx) => {
-    const count = totalVotes > 0 ? Math.round((v.count / totalVotes) * gridSize) : 0;
+    const count = pctBase > 0 ? Math.round((v.count / pctBase) * gridSize) : 0;
     for (let i = 0; i < count && filled < gridSize; i++) {
       cells[filled] = colors[idx % colors.length];
       filled++;
@@ -557,7 +559,7 @@ function TemplateWaffle({ votes, totalVotes, COLORS: colors }) {
       <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5">
         {votes.map((v, idx) => {
           const color = colors[idx % colors.length];
-          const pct = totalVotes > 0 ? (v.count / totalVotes) * 100 : 0;
+          const pct = pctBase > 0 ? (v.count / pctBase) * 100 : 0;
           return (
             <div key={v.optionId || idx} className="flex items-center gap-1.5 text-xs">
               <span className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: color }} />
@@ -567,12 +569,12 @@ function TemplateWaffle({ votes, totalVotes, COLORS: colors }) {
           );
         })}
       </div>
-      <p className="text-center text-2xl font-black text-white">{totalVotes} <span className="text-sm font-normal text-gray-500">votes</span></p>
+      <p className="text-center text-2xl font-black text-white">{isMultiSelect ? uniqueVoters : totalVotes} <span className="text-sm font-normal text-gray-500">{isMultiSelect ? "voters" : "votes"}</span></p>
     </div>
   );
 }
 
-function TemplateFunnel({ votes, totalVotes, COLORS: colors }) {
+function TemplateFunnel({ votes, totalVotes, COLORS: colors, pctBase, isMultiSelect, uniqueVoters }) {
   const sorted = [...votes].filter((v) => v.count > 0).sort((a, b) => b.count - a.count);
   if (sorted.length === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
   const max = sorted[0].count;
@@ -582,7 +584,7 @@ function TemplateFunnel({ votes, totalVotes, COLORS: colors }) {
         const origIdx = votes.indexOf(v);
         const color = colors[origIdx % colors.length];
         const widthPct = max > 0 ? (v.count / max) * 100 : 0;
-        const votePct = totalVotes > 0 ? (v.count / totalVotes) * 100 : 0;
+        const votePct = pctBase > 0 ? (v.count / pctBase) * 100 : 0;
         return (
           <div key={v.optionId || idx} className="flex flex-col items-center">
             <div
@@ -602,12 +604,12 @@ function TemplateFunnel({ votes, totalVotes, COLORS: colors }) {
           </div>
         );
       })}
-      <p className="text-center text-xs text-gray-500 mt-2">{totalVotes} total votes</p>
+      <p className="text-center text-xs text-gray-500 mt-2">{isMultiSelect ? `${uniqueVoters} voters · ${totalVotes} selections` : `${totalVotes} total votes`}</p>
     </div>
   );
 }
 
-function TemplateEmoji({ votes, totalVotes, COLORS: colors }) {
+function TemplateEmoji({ votes, totalVotes, COLORS: colors, pctBase }) {
   if (votes.length === 0 || totalVotes === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
   const sorted = [...votes].sort((a, b) => b.count - a.count);
   const emojiList = ["🔥", "⚡", "💎", "🚀", "🌟", "💥", "🎯", "👑", "⭐", "🏅"];
@@ -618,7 +620,7 @@ function TemplateEmoji({ votes, totalVotes, COLORS: colors }) {
         {sorted.map((v, idx) => {
           const origIdx = votes.indexOf(v);
           const color = colors[origIdx % colors.length];
-          const pct = totalVotes > 0 ? (v.count / totalVotes) * 100 : 0;
+          const pct = pctBase > 0 ? (v.count / pctBase) * 100 : 0;
           const emoji = emojiList[origIdx % emojiList.length];
           const repeatCount = Math.min(Math.max(v.count, 0), 20);
           const isLeader = idx === 0;
@@ -645,7 +647,7 @@ function TemplateEmoji({ votes, totalVotes, COLORS: colors }) {
   );
 }
 
-function TemplatePulse({ votes, totalVotes, COLORS: colors }) {
+function TemplatePulse({ votes, totalVotes, COLORS: colors, pctBase }) {
   if (votes.length === 0 || totalVotes === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
   const sorted = [...votes].sort((a, b) => b.count - a.count);
   const max = sorted[0].count || 1;
@@ -655,7 +657,7 @@ function TemplatePulse({ votes, totalVotes, COLORS: colors }) {
       {sorted.map((v, idx) => {
         const origIdx = votes.indexOf(v);
         const color = colors[origIdx % colors.length];
-        const pct = totalVotes > 0 ? (v.count / totalVotes) * 100 : 0;
+        const pct = pctBase > 0 ? (v.count / pctBase) * 100 : 0;
         const barW = max > 0 ? (v.count / max) * 100 : 0;
         const isLeader = idx === 0;
         return (
@@ -719,7 +721,7 @@ function TemplatePulse({ votes, totalVotes, COLORS: colors }) {
   );
 }
 
-function TemplateSlots({ votes, totalVotes, COLORS: colors }) {
+function TemplateSlots({ votes, totalVotes, COLORS: colors, pctBase, isMultiSelect, uniqueVoters }) {
   if (votes.length === 0 || totalVotes === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
   const sorted = [...votes].sort((a, b) => b.count - a.count);
   const tickerText = sorted.map((v) => `${v.optionText}: ${v.count} votes`).join("   ★   ");
@@ -738,7 +740,7 @@ function TemplateSlots({ votes, totalVotes, COLORS: colors }) {
         {sorted.map((v, idx) => {
           const origIdx = votes.indexOf(v);
           const color = colors[origIdx % colors.length];
-          const pct = totalVotes > 0 ? (v.count / totalVotes) * 100 : 0;
+          const pct = pctBase > 0 ? (v.count / pctBase) * 100 : 0;
           const isJackpot = idx === 0;
           return (
             <div
@@ -766,13 +768,13 @@ function TemplateSlots({ votes, totalVotes, COLORS: colors }) {
         })}
       </div>
       <div className="border-t border-purple-900/30 px-4 py-2 text-center text-xs text-purple-400/60">
-        {totalVotes} spins total
+        {isMultiSelect ? `${uniqueVoters} players · ${totalVotes} spins` : `${totalVotes} spins total`}
       </div>
     </div>
   );
 }
 
-function TemplateParticles({ votes, totalVotes, COLORS: colors }) {
+function TemplateParticles({ votes, totalVotes, COLORS: colors, pctBase, isMultiSelect, uniqueVoters }) {
   if (votes.length === 0 || totalVotes === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
   const sorted = [...votes].sort((a, b) => b.count - a.count);
   const max = sorted[0].count || 1;
@@ -783,7 +785,7 @@ function TemplateParticles({ votes, totalVotes, COLORS: colors }) {
         {sorted.map((v, idx) => {
           const origIdx = votes.indexOf(v);
           const color = colors[origIdx % colors.length];
-          const pct = totalVotes > 0 ? (v.count / totalVotes) * 100 : 0;
+          const pct = pctBase > 0 ? (v.count / pctBase) * 100 : 0;
           const ratio = v.count / max;
           const particleCount = Math.min(Math.max(Math.round(ratio * 8), 2), 8);
           const isLeader = idx === 0;
@@ -833,12 +835,12 @@ function TemplateParticles({ votes, totalVotes, COLORS: colors }) {
           );
         })}
       </div>
-      <p className="text-center text-xs text-gray-600 mt-4">{totalVotes} votes · particles mode</p>
+      <p className="text-center text-xs text-gray-600 mt-4">{isMultiSelect ? `${uniqueVoters} voters · ${totalVotes} selections` : `${totalVotes} votes`} · particles mode</p>
     </div>
   );
 }
 
-function TemplateBigScreen({ votes, totalVotes, COLORS: colors }) {
+function TemplateBigScreen({ votes, totalVotes, COLORS: colors, pctBase, isMultiSelect, uniqueVoters }) {
   if (votes.length === 0 || totalVotes === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
   const sorted = [...votes].sort((a, b) => b.count - a.count);
   const max = sorted[0].count || 1;
@@ -858,7 +860,7 @@ function TemplateBigScreen({ votes, totalVotes, COLORS: colors }) {
         <p className="text-lg md:text-2xl font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-wa-green via-cyan-400 to-wa-green animate-shimmer" style={{ backgroundSize: "200% auto" }}>
           LIVE RESULTS
         </p>
-        <p className="text-xs md:text-sm text-gray-500 mt-1">{totalVotes} votes</p>
+        <p className="text-xs md:text-sm text-gray-500 mt-1">{isMultiSelect ? `${uniqueVoters} voters · ${totalVotes} selections` : `${totalVotes} votes`}</p>
       </div>
 
       {/* Main bars */}
@@ -866,7 +868,7 @@ function TemplateBigScreen({ votes, totalVotes, COLORS: colors }) {
         {sorted.map((v, idx) => {
           const origIdx = votes.indexOf(v);
           const color = colors[origIdx % colors.length];
-          const pct = totalVotes > 0 ? (v.count / totalVotes) * 100 : 0;
+          const pct = pctBase > 0 ? (v.count / pctBase) * 100 : 0;
           const barW = max > 0 ? (v.count / max) * 100 : 0;
           const isLeader = idx === 0;
           return (
@@ -1268,7 +1270,7 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
       )}
 
       {/* Results tab */}
-      {tab === "results" && renderTemplate(activeTemplate, { votes, chartData, totalVotes, COLORS, allVoters, uniqueVoters, isMultiSelect })}
+      {tab === "results" && renderTemplate(activeTemplate, { votes, chartData, totalVotes, COLORS, allVoters, uniqueVoters, isMultiSelect, pctBase: isMultiSelect ? (uniqueVoters || 1) : (totalVotes || 1) })}
 
       {/* Voters tab */}
       {tab === "voters" && (
