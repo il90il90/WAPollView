@@ -5,6 +5,8 @@ Live polling dashboard that connects to WhatsApp, detects polls in your groups, 
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Docker](https://img.shields.io/badge/docker-ready-blue)
 
+![Live Dashboard](docs/dashboard-vote.png)
+
 ## Features
 
 - **One-Command Setup** — `docker compose up -d` and you're live
@@ -78,11 +80,17 @@ POSTGRES_PASSWORD=your_db_pass  # Default: pollpass_secure_2024
 3. Pick a **display template** from the template row (14 regular + 4 animated)
 4. Click **Share to Viewers** to broadcast to the Viewer screen
 
+![Groups Selection](docs/groups.png)
+
+![Admin Dashboard](docs/admin-dashboard.png)
+
 ### Viewer Mode
 
 1. Click **Enter as Viewer** on the main screen (no password)
 2. The shared poll appears automatically with real-time updates
 3. Perfect for projecting on a big screen — use the **Big Screen** animated template
+
+![Viewer Mode](docs/viewer.png)
 
 ## Display Templates
 
