@@ -1,0 +1,298 @@
+const express = require("express");
+
+module.exports = function (prisma) {
+  const router = express.Router();
+
+  router.post("/admin/login", (req, res) => {
+    const { password } = req.body;
+    const adminPassword = process.env.ADMIN_PASSWORD || "admin123";
+    if (password === adminPassword) {
+      return res.json({ success: true });
+    }
+    return res.status(401).json({ success: false, error: "Wrong password" });
+  });
+
+  router.get("/groups", async (req, res) => {
+    try {
+      const groups = await prisma.group.findMany({
+        include: {
+          polls: {
+            include: {
+              options: true,
+            },
+            orderBy: { createdAt: "desc" },
+          },
+        },
+        orderBy: { name: "asc" },
+      });
+
+      const pollIds = groups.flatMap((g) => g.polls.map((p) => p.id));
+      let voterCounts = {};
+      if (pollIds.length > 0) {
+        const counts = await prisma.$queryRaw`
+          SELECT sub."pollId", COUNT(*)::int AS "uniqueVoters"
+          FROM (
+            SELECT DISTINCT ON ("voterJid") "pollId", "voterJid", "selectedOptionText"
+            FROM "VoteLog"
+            WHERE "pollId" = ANY(${pollIds})
+            ORDER BY "voterJid", "timestamp" DESC
+          ) sub
+          WHERE sub."selectedOptionText" != ''
+          GROUP BY sub."pollId"
+        `;
+        for (const row of counts) {
+          voterCounts[row.pollId] = row.uniqueVoters;
+        }
+      }
+
+      const result = groups.map((g) => ({
+        ...g,
+        polls: g.polls.map((p) => ({
+          ...p,
+          _count: { votes: voterCounts[p.id] || 0 },
+        })),
+      }));
+
+      res.json(result);
+    } catch (err) {
+      console.error("[API] /groups error:", err.message);
+      res.status(500).json({ error: "Failed to fetch groups" });
+    }
+  });
+
+  router.get("/polls/:pollId", async (req, res) => {
+    try {
+      const poll = await prisma.poll.findUnique({
+        where: { id: req.params.pollId },
+        include: {
+          options: true,
+          group: true,
+        },
+      });
+      if (!poll) return res.status(404).json({ error: "Poll not found" });
+      res.json(poll);
+    } catch (err) {
+      console.error("[API] /polls/:id error:", err.message);
+      res.status(500).json({ error: "Failed to fetch poll" });
+    }
+  });
+
+  router.get("/polls/:pollId/votes", async (req, res) => {
+    try {
+      const { getAggregatedVotes } = require("../whatsapp");
+      const votes = await getAggregatedVotes(req.params.pollId, prisma);
+      res.json(votes);
+    } catch (err) {
+      console.error("[API] /polls/:id/votes error:", err.message);
+      res.status(500).json({ error: "Failed to fetch votes" });
+    }
+  });
+
+  router.get("/polls/:pollId/vote-log", async (req, res) => {
+    try {
+      const logs = await prisma.voteLog.findMany({
+        where: { pollId: req.params.pollId },
+        include: { option: true },
+        orderBy: { timestamp: "desc" },
+        take: 500,
+      });
+      res.json(logs);
+    } catch (err) {
+      console.error("[API] /polls/:id/vote-log error:", err.message);
+      res.status(500).json({ error: "Failed to fetch vote log" });
+    }
+  });
+
+  router.get("/polls/:pollId/voters", async (req, res) => {
+    try {
+      const { getAggregatedVotes } = require("../whatsapp");
+      const votes = await getAggregatedVotes(req.params.pollId, prisma);
+      res.json(votes);
+    } catch (err) {
+      console.error("[API] /polls/:id/voters error:", err.message);
+      res.status(500).json({ error: "Failed to fetch voters" });
+    }
+  });
+
+  router.post("/polls/create", async (req, res) => {
+    try {
+      const { getSock } = require("../whatsapp");
+      const sock = getSock();
+      if (!sock) {
+        return res.status(503).json({ error: "WhatsApp not connected" });
+      }
+
+      const { groupJid, title, description, options } = req.body;
+      if (!groupJid || !title || !options || options.length < 2) {
+        return res.status(400).json({
+          error: "groupJid, title, and at least 2 options required",
+        });
+      }
+
+      const sentMsg = await sock.sendMessage(groupJid, {
+        poll: {
+          name: title,
+          values: options,
+          selectableCount: 1,
+        },
+      });
+
+      const { proto } = require("@whiskeysockets/baileys");
+      const { createHash } = require("crypto");
+
+      const pollKeyStr = JSON.stringify({
+        remoteJid: sentMsg.key.remoteJid,
+        id: sentMsg.key.id,
+        participant: sentMsg.key.participant,
+      });
+
+      let messageContent = null;
+      if (sentMsg.message) {
+        try {
+          messageContent = Buffer.from(
+            proto.Message.encode(sentMsg.message).finish()
+          ).toString("base64");
+        } catch (e) {
+          console.error("[API] Failed to encode sent message:", e.message);
+        }
+      }
+
+      let group = await prisma.group.findUnique({
+        where: { jid: groupJid },
+      });
+      if (!group) {
+        group = await prisma.group.create({
+          data: { jid: groupJid, name: groupJid },
+        });
+      }
+
+      const poll = await prisma.poll.create({
+        data: {
+          messageKey: pollKeyStr,
+          messageContent,
+          title,
+          description: description || null,
+          groupId: group.id,
+          options: {
+            create: options.map((optText) => ({
+              optionText: optText,
+              optionHash: createHash("sha256")
+                .update(Buffer.from(optText))
+                .digest("hex"),
+            })),
+          },
+        },
+        include: { options: true, group: true },
+      });
+
+      console.log(`[API] Poll created: "${title}" in ${groupJid}`);
+      res.json(poll);
+    } catch (err) {
+      console.error("[API] /polls/create error:", err.message);
+      res.status(500).json({ error: "Failed to create poll" });
+    }
+  });
+
+  let activeViewerPollId = null;
+  let activeViewerTemplate = "classic";
+
+  router.get("/viewer-poll", async (req, res) => {
+    if (!activeViewerPollId) {
+      return res.json({ poll: null, group: null, template: activeViewerTemplate });
+    }
+    try {
+      const poll = await prisma.poll.findUnique({
+        where: { id: activeViewerPollId },
+        include: { options: true, group: true, _count: { select: { votes: true } } },
+      });
+      if (!poll) {
+        activeViewerPollId = null;
+        return res.json({ poll: null, group: null, template: activeViewerTemplate });
+      }
+      res.json({ poll, group: poll.group, template: activeViewerTemplate });
+    } catch (err) {
+      console.error("[API] /viewer-poll error:", err.message);
+      res.status(500).json({ error: "Failed to fetch viewer poll" });
+    }
+  });
+
+  router.post("/viewer-poll", (req, res) => {
+    const { pollId, template } = req.body;
+    activeViewerPollId = pollId || null;
+    if (template) activeViewerTemplate = template;
+    console.log(`[API] Viewer poll set to: ${activeViewerPollId}, template: ${activeViewerTemplate}`);
+    const io = req.app.get("io");
+    if (io) {
+      io.emit("viewer_poll_changed", { pollId: activeViewerPollId, template: activeViewerTemplate });
+    }
+    res.json({ success: true, pollId: activeViewerPollId, template: activeViewerTemplate });
+  });
+
+  router.post("/viewer-template", (req, res) => {
+    const { template } = req.body;
+    if (!template) return res.status(400).json({ error: "template required" });
+    activeViewerTemplate = template;
+    console.log(`[API] Viewer template set to: ${activeViewerTemplate}`);
+    const io = req.app.get("io");
+    if (io) {
+      io.emit("viewer_template_changed", { template: activeViewerTemplate });
+    }
+    res.json({ success: true, template: activeViewerTemplate });
+  });
+
+  router.get("/connection-status", (req, res) => {
+    const { getConnectionState } = require("../whatsapp");
+    res.json({ status: getConnectionState() });
+  });
+
+  router.post("/polls/:pollId/sync", async (req, res) => {
+    try {
+      const { getSock } = require("../whatsapp");
+      const sock = getSock();
+      if (!sock) return res.status(503).json({ error: "WhatsApp not connected" });
+
+      const poll = await prisma.poll.findUnique({
+        where: { id: req.params.pollId },
+        include: { options: true, group: true },
+      });
+      if (!poll) return res.status(404).json({ error: "Poll not found" });
+
+      const msgKey = JSON.parse(poll.messageKey);
+
+      const messages = await sock.fetchMessagesFromWA(msgKey.remoteJid, 50);
+      let processedVotes = 0;
+
+      if (messages && messages.length > 0) {
+        const { processVoteFromUpsert: processVote, getAggregatedVotes } = require("../whatsapp");
+        for (const msg of messages) {
+          if (msg.message?.pollUpdateMessage) {
+            try {
+              const result = await processVote(msg, prisma, req.app.get("io"));
+              if (result) processedVotes++;
+            } catch (e) {}
+          }
+        }
+      }
+
+      const { getAggregatedVotes } = require("../whatsapp");
+      const votes = await getAggregatedVotes(poll.id, prisma);
+      res.json({ success: true, processedVotes, votes });
+    } catch (err) {
+      console.error("[API] sync error:", err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.post("/pairing-code", async (req, res) => {
+    try {
+      const { requestPairingCode } = require("../whatsapp");
+      const { phoneNumber } = req.body;
+      const code = await requestPairingCode(phoneNumber);
+      res.json({ success: true, code });
+    } catch (err) {
+      res.status(400).json({ success: false, error: err.message });
+    }
+  });
+
+  return router;
+};

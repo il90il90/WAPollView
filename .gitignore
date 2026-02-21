@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+auth_info/
+tmp/
+*.log
+.DS_Store
+.cursor/
+agent-transcripts/
+mcps/
+terminals/

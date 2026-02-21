@@ -1,0 +1,234 @@
+import { useState } from "react";
+
+const API_BASE = import.meta.env.VITE_BACKEND_URL || "";
+
+export default function Step3CreatePoll({ group, onPollCreated, onBack }) {
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [options, setOptions] = useState(["", ""]);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState(null);
+
+  const addOption = () => {
+    if (options.length >= 12) return;
+    setOptions([...options, ""]);
+  };
+
+  const removeOption = (idx) => {
+    if (options.length <= 2) return;
+    setOptions(options.filter((_, i) => i !== idx));
+  };
+
+  const updateOption = (idx, value) => {
+    const updated = [...options];
+    updated[idx] = value;
+    setOptions(updated);
+  };
+
+  const isValid =
+    title.trim().length > 0 &&
+    options.filter((o) => o.trim().length > 0).length >= 2;
+
+  const handleSubmit = async () => {
+    if (!isValid || sending) return;
+    setError(null);
+    setSending(true);
+
+    try {
+      const cleanOptions = options
+        .map((o) => o.trim())
+        .filter((o) => o.length > 0);
+
+      const res = await fetch(`${API_BASE}/api/polls/create`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          groupJid: group.jid,
+          title: title.trim(),
+          description: description.trim() || null,
+          options: cleanOptions,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to create poll");
+      }
+
+      const poll = await res.json();
+      onPollCreated(poll);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="max-w-lg mx-auto space-y-6">
+      <div className="flex items-center gap-3">
+        <button
+          onClick={onBack}
+          className="w-8 h-8 rounded-lg bg-gray-800 flex items-center justify-center hover:bg-gray-700 transition-colors"
+        >
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M15 19l-7-7 7-7"
+            />
+          </svg>
+        </button>
+        <div>
+          <h2 className="text-xl font-bold">Create Poll</h2>
+          <p className="text-gray-400 text-sm">
+            Sending to{" "}
+            <span className="text-wa-green">{group?.name}</span>
+          </p>
+        </div>
+      </div>
+
+      <div className="card p-6 space-y-5">
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-gray-300">
+            Poll Title
+          </label>
+          <input
+            type="text"
+            placeholder="What do you want to ask?"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            maxLength={255}
+            className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3
+                       text-sm focus:outline-none focus:border-wa-green/50 focus:ring-1 focus:ring-wa-green/20
+                       transition-all placeholder-gray-600"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-gray-300">
+            Description{" "}
+            <span className="text-gray-600 font-normal">(optional)</span>
+          </label>
+          <textarea
+            placeholder="Add context or instructions..."
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={2}
+            className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3
+                       text-sm focus:outline-none focus:border-wa-green/50 focus:ring-1 focus:ring-wa-green/20
+                       transition-all placeholder-gray-600 resize-none"
+          />
+        </div>
+
+        <div className="space-y-3">
+          <label className="block text-sm font-medium text-gray-300">
+            Options
+          </label>
+          {options.map((opt, idx) => (
+            <div key={idx} className="flex items-center gap-2">
+              <span className="text-xs text-gray-600 w-5 text-right shrink-0">
+                {idx + 1}.
+              </span>
+              <input
+                type="text"
+                placeholder={`Option ${idx + 1}`}
+                value={opt}
+                onChange={(e) => updateOption(idx, e.target.value)}
+                maxLength={100}
+                className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5
+                           text-sm focus:outline-none focus:border-wa-green/50 focus:ring-1 focus:ring-wa-green/20
+                           transition-all placeholder-gray-600"
+              />
+              {options.length > 2 && (
+                <button
+                  onClick={() => removeOption(idx)}
+                  className="w-8 h-8 rounded-lg bg-red-500/10 text-red-400 flex items-center justify-center
+                             hover:bg-red-500/20 transition-colors shrink-0"
+                >
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              )}
+            </div>
+          ))}
+
+          {options.length < 12 && (
+            <button
+              onClick={addOption}
+              className="flex items-center gap-2 text-sm text-wa-green hover:text-wa-green/80 transition-colors"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+              Add option
+            </button>
+          )}
+        </div>
+      </div>
+
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-sm text-red-400">
+          {error}
+        </div>
+      )}
+
+      <button
+        onClick={handleSubmit}
+        disabled={!isValid || sending}
+        className="btn-primary w-full flex items-center justify-center gap-2"
+      >
+        {sending ? (
+          <>
+            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            Sending...
+          </>
+        ) : (
+          <>
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+              />
+            </svg>
+            Launch Poll
+          </>
+        )}
+      </button>
+    </div>
+  );
+}
