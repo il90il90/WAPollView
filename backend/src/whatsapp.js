@@ -247,7 +247,8 @@ async function handleMessagesUpsert(upsert, prisma, io) {
           const aggregated = await getAggregatedVotes(dbPoll.id, prisma);
           io.to(dbPoll.id).emit("poll_vote_received", {
             pollId: dbPoll.id,
-            votes: aggregated,
+            votes: aggregated.options,
+            uniqueVoters: aggregated.uniqueVoters,
             voter,
             selectedOption,
             timestamp: Date.now(),
@@ -334,7 +335,7 @@ async function handleMessagesUpdate(updates, prisma, io) {
           }
 
           const aggregated = await getAggregatedVotes(dbPoll.id, prisma);
-          io.to(dbPoll.id).emit("poll_vote_received", { pollId: dbPoll.id, votes: aggregated, timestamp: Date.now() });
+          io.to(dbPoll.id).emit("poll_vote_received", { pollId: dbPoll.id, votes: aggregated.options, uniqueVoters: aggregated.uniqueVoters, timestamp: Date.now() });
           io.emit("poll_data_changed", { pollId: dbPoll.id, timestamp: Date.now() });
         } catch (decryptErr) {
           console.error("[Vote] Decryption/processing error:", decryptErr.message);
@@ -694,18 +695,16 @@ async function processVoteFromUpsert(msg, prisma, io) {
       return { poll: dbPoll, voter: { name: voterName, jid: voterJid, phone: voterPhone }, selectedOption: null };
     }
 
-    for (const sel of selectedTexts) {
-      await prisma.voteLog.create({
-        data: {
-          pollId: dbPoll.id,
-          optionId: sel.optionId,
-          voterJid,
-          voterName,
-          voterPhone,
-          selectedOptionText: sel.optionText,
-        },
-      });
-    }
+    await prisma.voteLog.create({
+      data: {
+        pollId: dbPoll.id,
+        optionId: selectedTexts.length === 1 ? selectedTexts[0].optionId : null,
+        voterJid,
+        voterName,
+        voterPhone,
+        selectedOptionText: newSelection,
+      },
+    });
     console.log(`[processVote] NEW VOTE: ${voterName || voterJid} (phone: ${voterPhone}) -> "${newSelection}" in "${dbPoll.title}"`);
     return {
       poll: dbPoll,
@@ -787,6 +786,7 @@ async function processPollCreation(msg, prisma) {
   }
 
   const options = pollCreation.options || [];
+  const selectableCount = pollCreation.selectableOptionsCount ?? 1;
   const poll = await prisma.poll.create({
     data: {
       messageKey: pollKeyStr,
@@ -794,6 +794,7 @@ async function processPollCreation(msg, prisma) {
       title: pollCreation.name || "Untitled Poll",
       description: pollCreation.description || null,
       groupId: group.id,
+      selectableCount,
       options: {
         create: options.map((opt) => {
           const text = opt.optionName || opt;
@@ -808,7 +809,7 @@ async function processPollCreation(msg, prisma) {
     },
   });
 
-  console.log(`[Poll] Saved poll "${poll.title}" in group ${groupJid}`);
+  console.log(`[Poll] Saved poll "${poll.title}" (selectable: ${selectableCount}) in group ${groupJid}`);
   return poll;
 }
 
@@ -835,9 +836,10 @@ async function getAggregatedVotes(pollId, prisma) {
 
   const result = [];
   for (const opt of options) {
-    const votersForOption = activeVotes.filter(
-      (v) => v.selectedOptionText === opt.optionText
-    );
+    const votersForOption = activeVotes.filter((v) => {
+      const selected = v.selectedOptionText.split("|");
+      return selected.includes(opt.optionText);
+    });
 
     result.push({
       optionId: opt.id,
@@ -850,7 +852,9 @@ async function getAggregatedVotes(pollId, prisma) {
       })),
     });
   }
-  return result;
+
+  const uniqueVoters = activeVotes.length;
+  return { options: result, uniqueVoters };
 }
 
 module.exports = {

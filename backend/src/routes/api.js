@@ -141,8 +141,8 @@ module.exports = function (prisma) {
   router.get("/polls/:pollId/votes", async (req, res) => {
     try {
       const { getAggregatedVotes } = require("../whatsapp");
-      const votes = await getAggregatedVotes(req.params.pollId, prisma);
-      res.json(votes);
+      const aggregated = await getAggregatedVotes(req.params.pollId, prisma);
+      res.json(aggregated);
     } catch (err) {
       console.error("[API] /polls/:id/votes error:", err.message);
       res.status(500).json({ error: "Failed to fetch votes" });
@@ -167,8 +167,8 @@ module.exports = function (prisma) {
   router.get("/polls/:pollId/voters", async (req, res) => {
     try {
       const { getAggregatedVotes } = require("../whatsapp");
-      const votes = await getAggregatedVotes(req.params.pollId, prisma);
-      res.json(votes);
+      const aggregated = await getAggregatedVotes(req.params.pollId, prisma);
+      res.json(aggregated);
     } catch (err) {
       console.error("[API] /polls/:id/voters error:", err.message);
       res.status(500).json({ error: "Failed to fetch voters" });
@@ -183,18 +183,19 @@ module.exports = function (prisma) {
         return res.status(503).json({ error: "WhatsApp not connected" });
       }
 
-      const { groupJid, title, description, options } = req.body;
+      const { groupJid, title, description, options, selectableCount } = req.body;
       if (!groupJid || !title || !options || options.length < 2) {
         return res.status(400).json({
           error: "groupJid, title, and at least 2 options required",
         });
       }
 
+      const selCount = Math.max(0, Math.min(selectableCount ?? 1, options.length));
       const sentMsg = await sock.sendMessage(groupJid, {
         poll: {
           name: title,
           values: options,
-          selectableCount: 1,
+          selectableCount: selCount,
         },
       });
 
@@ -234,6 +235,7 @@ module.exports = function (prisma) {
           title,
           description: description || null,
           groupId: group.id,
+          selectableCount: selCount,
           options: {
             create: options.map((optText) => ({
               optionText: optText,
@@ -336,8 +338,8 @@ module.exports = function (prisma) {
       }
 
       const { getAggregatedVotes } = require("../whatsapp");
-      const votes = await getAggregatedVotes(poll.id, prisma);
-      res.json({ success: true, processedVotes, votes });
+      const aggregated = await getAggregatedVotes(poll.id, prisma);
+      res.json({ success: true, processedVotes, votes: aggregated.options, uniqueVoters: aggregated.uniqueVoters });
     } catch (err) {
       console.error("[API] sync error:", err.message);
       res.status(500).json({ error: err.message });

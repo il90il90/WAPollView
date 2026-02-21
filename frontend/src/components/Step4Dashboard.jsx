@@ -60,9 +60,13 @@ function VoteSplash({ splash }) {
         <p className="text-lg md:text-xl text-gray-300 mt-2 font-medium">
           voted for
         </p>
-        <p className="text-2xl md:text-4xl font-black text-wa-green mt-1 drop-shadow-[0_0_20px_rgba(37,211,102,0.6)]">
-          {splash.selectedOption}
-        </p>
+        <div className="flex flex-wrap justify-center gap-2 mt-1">
+          {(splash.selectedOption || "").split("|").map((opt, i) => (
+            <p key={i} className="text-2xl md:text-3xl font-black text-wa-green drop-shadow-[0_0_20px_rgba(37,211,102,0.6)]">
+              {opt}
+            </p>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -92,12 +96,13 @@ const ANIMATED_TEMPLATES = [
   { key: "bigscreen", label: "Big Screen", icon: "🖥️" },
 ];
 
-function TemplateClassic({ votes, chartData, totalVotes, COLORS: colors }) {
+function TemplateClassic({ votes, chartData, totalVotes, COLORS: colors, uniqueVoters, isMultiSelect }) {
+  const denominator = isMultiSelect ? (uniqueVoters || 1) : (totalVotes || 1);
   return (
     <div className="space-y-4">
       <div className="card p-4 space-y-3">
         {votes.map((v, idx) => {
-          const pct = totalVotes > 0 ? (v.count / totalVotes) * 100 : 0;
+          const pct = denominator > 0 ? (v.count / denominator) * 100 : 0;
           const voters = v.voters || [];
           return (
             <div key={v.optionId || idx} className="space-y-1.5">
@@ -953,6 +958,7 @@ function renderTemplate(templateKey, props) {
 export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, viewerTemplate }) {
   const [votes, setVotes] = useState([]);
   const [totalVotes, setTotalVotes] = useState(0);
+  const [uniqueVoters, setUniqueVoters] = useState(0);
   const [lastUpdate, setLastUpdate] = useState(null);
   const [voteLog, setVoteLog] = useState([]);
   const [tab, setTab] = useState("results");
@@ -963,6 +969,7 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
   const refreshTimerRef = useRef(null);
   const splashTimerRef = useRef(null);
   const activeTemplate = isViewer ? (viewerTemplate || "classic") : template;
+  const isMultiSelect = poll?.selectableCount !== 1;
 
   const showVoteToast = useCallback((voterName, voterPhone, selectedOption) => {
     if (!selectedOption) return;
@@ -1031,11 +1038,13 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
       ]);
       const votesData = await votesRes.json();
       const logData = await logRes.json();
-      const newTotal = votesData.reduce((sum, v) => sum + v.count, 0);
+      const optionsArr = votesData.options || votesData;
+      const newTotal = optionsArr.reduce((sum, v) => sum + v.count, 0);
       prevTotalRef.current = newTotal;
 
-      setVotes(votesData);
+      setVotes(optionsArr);
       setTotalVotes(newTotal);
+      setUniqueVoters(votesData.uniqueVoters ?? newTotal);
       setVoteLog(logData);
       setLastUpdate(new Date());
     } catch (err) {
@@ -1086,16 +1095,32 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
 
   const leading = votes.reduce((best, v) => (v.count > best.count ? v : best), { count: 0, optionText: "-" });
 
-  const allVoters = votes.flatMap((v) =>
-    (v.voters || []).map((voter) => {
-      const d = voterDisplay(voter);
-      return {
-        ...d,
-        option: v.optionText,
-        optionColor: COLORS[votes.indexOf(v) % COLORS.length],
-      };
-    })
-  );
+  const allVoters = (() => {
+    if (!isMultiSelect) {
+      return votes.flatMap((v) =>
+        (v.voters || []).map((voter) => {
+          const d = voterDisplay(voter);
+          return { ...d, options: [{ text: v.optionText, color: COLORS[votes.indexOf(v) % COLORS.length] }], option: v.optionText, optionColor: COLORS[votes.indexOf(v) % COLORS.length] };
+        })
+      );
+    }
+    const voterMap = new Map();
+    votes.forEach((v, vIdx) => {
+      (v.voters || []).forEach((voter) => {
+        const d = voterDisplay(voter);
+        const key = d.jid || d.phone;
+        if (!voterMap.has(key)) {
+          voterMap.set(key, { ...d, options: [] });
+        }
+        voterMap.get(key).options.push({ text: v.optionText, color: COLORS[vIdx % COLORS.length] });
+      });
+    });
+    return Array.from(voterMap.values()).map((v) => ({
+      ...v,
+      option: v.options.map((o) => o.text).join(", "),
+      optionColor: v.options[0]?.color || COLORS[0],
+    }));
+  })();
 
   return (
     <div className="space-y-4">
@@ -1150,11 +1175,17 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-2">
+      <div className={`grid gap-2 ${isMultiSelect ? "grid-cols-4" : "grid-cols-3"}`}>
         <div className="card p-3 text-center">
-          <p className="text-2xl font-bold text-wa-green">{totalVotes}</p>
-          <p className="text-[10px] text-gray-500">Total Votes</p>
+          <p className="text-2xl font-bold text-wa-green">{uniqueVoters}</p>
+          <p className="text-[10px] text-gray-500">Voters</p>
         </div>
+        {isMultiSelect && (
+          <div className="card p-3 text-center">
+            <p className="text-2xl font-bold text-purple-400">{totalVotes}</p>
+            <p className="text-[10px] text-gray-500">Selections</p>
+          </div>
+        )}
         <div className="card p-3 text-center">
           <p className="text-2xl font-bold text-blue-400">{votes.length}</p>
           <p className="text-[10px] text-gray-500">Options</p>
@@ -1164,6 +1195,16 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
           <p className="text-[10px] text-gray-500">Leading ({leading.count})</p>
         </div>
       </div>
+      {isMultiSelect && (
+        <div className="flex items-center gap-2 px-1">
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 font-medium">
+            Multi-Select
+          </span>
+          <span className="text-[10px] text-gray-500">
+            {poll?.selectableCount === 0 ? "Unlimited selections" : `Up to ${poll?.selectableCount} selections`}
+          </span>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex bg-gray-900 rounded-xl p-1 gap-1">
@@ -1227,7 +1268,7 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
       )}
 
       {/* Results tab */}
-      {tab === "results" && renderTemplate(activeTemplate, { votes, chartData, totalVotes, COLORS, allVoters })}
+      {tab === "results" && renderTemplate(activeTemplate, { votes, chartData, totalVotes, COLORS, allVoters, uniqueVoters, isMultiSelect })}
 
       {/* Voters tab */}
       {tab === "voters" && (
@@ -1267,9 +1308,19 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
                           </div>
                         </td>
                         <td className="py-2.5 px-4">
-                          <span className="text-xs px-2 py-1 rounded-lg font-medium" style={{ backgroundColor: v.optionColor + "20", color: v.optionColor }}>
-                            {v.option}
-                          </span>
+                          {v.options && v.options.length > 1 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {v.options.map((opt, oi) => (
+                                <span key={oi} className="text-xs px-2 py-0.5 rounded-lg font-medium" style={{ backgroundColor: opt.color + "20", color: opt.color }}>
+                                  {opt.text}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-xs px-2 py-1 rounded-lg font-medium" style={{ backgroundColor: v.optionColor + "20", color: v.optionColor }}>
+                              {v.option}
+                            </span>
+                          )}
                         </td>
                       </tr>
                     );
@@ -1300,7 +1351,17 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
                         <span className="font-medium" title={log.voterName ? formatPhone(log.voterJid) : ""}>{logName}</span>
                       </p>
                       <p className="text-xs text-gray-500">
-                        voted <span className="text-wa-green font-medium">{log.selectedOptionText}</span>
+                        voted{" "}
+                        {log.selectedOptionText ? (
+                          log.selectedOptionText.split("|").map((opt, oi) => (
+                            <span key={oi}>
+                              {oi > 0 && <span className="text-gray-600"> + </span>}
+                              <span className="text-wa-green font-medium">{opt}</span>
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-gray-400 italic">retracted</span>
+                        )}
                       </p>
                     </div>
                     <span className="text-[10px] text-gray-600 shrink-0">

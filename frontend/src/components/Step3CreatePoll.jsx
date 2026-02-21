@@ -8,6 +8,8 @@ export default function Step3CreatePoll({ group, onPollCreated, onBack }) {
   const [options, setOptions] = useState(["", ""]);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
+  const [multiSelect, setMultiSelect] = useState(false);
+  const [maxSelections, setMaxSelections] = useState(0);
 
   const addOption = () => {
     if (options.length >= 12) return;
@@ -47,6 +49,7 @@ export default function Step3CreatePoll({ group, onPollCreated, onBack }) {
           title: title.trim(),
           description: description.trim() || null,
           options: cleanOptions,
+          selectableCount: multiSelect ? (maxSelections || 0) : 1,
         }),
       });
 
@@ -190,6 +193,39 @@ export default function Step3CreatePoll({ group, onPollCreated, onBack }) {
               </svg>
               Add option
             </button>
+          )}
+        </div>
+
+        <div className="space-y-3 border-t border-gray-800 pt-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="block text-sm font-medium text-gray-300">Multi-Select</label>
+              <p className="text-xs text-gray-500 mt-0.5">Allow voters to choose more than one option</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setMultiSelect(!multiSelect)}
+              className={`relative w-11 h-6 rounded-full transition-colors ${multiSelect ? "bg-wa-green" : "bg-gray-700"}`}
+            >
+              <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${multiSelect ? "translate-x-5" : ""}`} />
+            </button>
+          </div>
+          {multiSelect && (
+            <div className="flex items-center gap-3 pl-1">
+              <label className="text-xs text-gray-400">Max selections:</label>
+              <select
+                value={maxSelections}
+                onChange={(e) => setMaxSelections(Number(e.target.value))}
+                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-wa-green/50 text-gray-200"
+              >
+                <option value={0}>Unlimited</option>
+                {options.filter((o) => o.trim()).length > 0 &&
+                  Array.from({ length: Math.max(options.filter((o) => o.trim()).length - 1, 1) }, (_, i) => i + 2).map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))
+                }
+              </select>
+            </div>
           )}
         </div>
       </div>
