@@ -5,7 +5,6 @@ Live polling dashboard that connects to WhatsApp, detects polls in your groups, 
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Docker](https://img.shields.io/badge/docker-ready-blue)
 
-![Live Dashboard](docs/dashboard-vote.png)
 
 ## Features
 
