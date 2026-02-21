@@ -27,7 +27,6 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://polluser:pollpass_secure_2024@postgres:5432/whatsapp_polls}
       NODE_ENV: production
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
     volumes:
       - ./auth_info:/app/auth_info
     ports:
@@ -41,7 +40,7 @@ services:
     depends_on:
       - backend
     ports:
-      - "${FRONTEND_PORT:-5173}:80"
+      - "${FRONTEND_PORT:-9090}:80"
 
 volumes:
   pg_data:

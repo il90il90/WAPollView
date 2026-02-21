@@ -1,15 +1,76 @@
 const express = require("express");
+const crypto = require("crypto");
+
+function hashPassword(pw) {
+  return crypto.createHash("sha256").update(pw).digest("hex");
+}
 
 module.exports = function (prisma) {
   const router = express.Router();
 
-  router.post("/admin/login", (req, res) => {
-    const { password } = req.body;
-    const adminPassword = process.env.ADMIN_PASSWORD || "admin123";
-    if (password === adminPassword) {
-      return res.json({ success: true });
+  router.get("/admin/setup-status", async (req, res) => {
+    try {
+      const setting = await prisma.appSettings.findUnique({ where: { key: "admin_password" } });
+      res.json({ isConfigured: !!setting });
+    } catch {
+      res.json({ isConfigured: false });
     }
-    return res.status(401).json({ success: false, error: "Wrong password" });
+  });
+
+  router.post("/admin/setup", async (req, res) => {
+    const { password } = req.body;
+    if (!password || password.length < 4) {
+      return res.status(400).json({ success: false, error: "Password must be at least 4 characters" });
+    }
+    try {
+      const existing = await prisma.appSettings.findUnique({ where: { key: "admin_password" } });
+      if (existing) {
+        return res.status(400).json({ success: false, error: "Password already configured. Use change-password instead." });
+      }
+      await prisma.appSettings.create({ data: { key: "admin_password", value: hashPassword(password) } });
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[API] /admin/setup error:", err.message);
+      res.status(500).json({ success: false, error: "Setup failed" });
+    }
+  });
+
+  router.post("/admin/login", async (req, res) => {
+    const { password } = req.body;
+    try {
+      const setting = await prisma.appSettings.findUnique({ where: { key: "admin_password" } });
+      if (!setting) {
+        return res.status(400).json({ success: false, error: "Password not configured yet" });
+      }
+      if (setting.value === hashPassword(password)) {
+        return res.json({ success: true });
+      }
+      return res.status(401).json({ success: false, error: "Wrong password" });
+    } catch (err) {
+      console.error("[API] /admin/login error:", err.message);
+      return res.status(500).json({ success: false, error: "Login failed" });
+    }
+  });
+
+  router.post("/admin/change-password", async (req, res) => {
+    const { currentPassword, newPassword } = req.body;
+    if (!newPassword || newPassword.length < 4) {
+      return res.status(400).json({ success: false, error: "New password must be at least 4 characters" });
+    }
+    try {
+      const setting = await prisma.appSettings.findUnique({ where: { key: "admin_password" } });
+      if (!setting) {
+        return res.status(400).json({ success: false, error: "Password not configured" });
+      }
+      if (setting.value !== hashPassword(currentPassword)) {
+        return res.status(401).json({ success: false, error: "Current password is wrong" });
+      }
+      await prisma.appSettings.update({ where: { key: "admin_password" }, data: { value: hashPassword(newPassword) } });
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[API] /admin/change-password error:", err.message);
+      res.status(500).json({ success: false, error: "Failed to change password" });
+    }
   });
 
   router.get("/groups", async (req, res) => {

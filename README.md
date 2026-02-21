@@ -13,6 +13,8 @@ Live polling dashboard that connects to WhatsApp, detects polls in your groups, 
 - **Real-Time Votes** — Votes are decrypted and pushed to the dashboard instantly via WebSocket
 - **18 Display Templates** — Classic bars, Pie, Radial, Podium, Battle VS, Gauge, Bubbles, Neon, Stadium, Waffle, Funnel, Emoji War + 4 animated templates (Pulse Wave, Slot Machine, Particles, Big Screen)
 - **Admin / Viewer Modes** — Admin manages polls; Viewer shows shared results (great for projection)
+- **First-Time Password Setup** — On first launch the UI asks you to choose an admin password (stored securely in the database, not in config files)
+- **Change Password** — Admin can change the password from the Admin panel at any time
 - **Share to Viewer** — Broadcast a poll to the Viewer screen with one click
 - **Voter Details** — Shows voter name and phone number on hover
 - **Vote Notifications** — Full-screen animation with confetti when a new vote arrives
@@ -36,22 +38,31 @@ That's it. No `.env` file needed — everything works with sensible defaults.
 
 ### 2. Open the App
 
-Go to **[http://localhost:5173](http://localhost:5173)**
+Go to **[http://localhost:9090](http://localhost:9090)**
 
-### 3. Connect WhatsApp
+### 3. First-Time Setup
 
-1. Click **Admin** (top-right) → default password is `admin123`
-2. Scan the **QR code** with WhatsApp (Settings → Linked Devices → Link a Device)
-3. Done — your groups and polls appear automatically
+On the first launch you'll see a **First Time Setup** screen:
+
+1. **Choose an admin password** (minimum 4 characters) and confirm it
+2. You're automatically logged in as Admin
+3. Scan the **QR code** with WhatsApp (Settings → Linked Devices → Link a Device)
+4. Done — your groups and polls appear automatically
+
+The password is stored securely (SHA-256 hashed) in the database. No environment variables or config files needed.
+
+### Returning Visits
+
+1. Click **Admin** (top-right) → enter your password
+2. Or click **Enter as Viewer** for read-only access
 
 ## Optional Configuration
 
-Create a `.env` file only if you want to customize:
+Create a `.env` file only if you want to customize ports or database credentials:
 
 ```env
-ADMIN_PASSWORD=your_password    # Default: admin123
-FRONTEND_PORT=5173              # Web UI port
-BACKEND_PORT=3002               # API port
+FRONTEND_PORT=9090              # Web UI port (default: 9090)
+BACKEND_PORT=3002               # API port (default: 3002)
 POSTGRES_PASSWORD=your_db_pass  # Default: pollpass_secure_2024
 ```
 
@@ -60,8 +71,7 @@ POSTGRES_PASSWORD=your_db_pass  # Default: pollpass_secure_2024
 
 | Variable            | Default                  | Description              |
 |---------------------|--------------------------|--------------------------|
-| `ADMIN_PASSWORD`    | `admin123`               | Admin panel password     |
-| `FRONTEND_PORT`     | `5173`                   | Web UI port              |
+| `FRONTEND_PORT`     | `9090`                   | Web UI port              |
 | `BACKEND_PORT`      | `3002`                   | Backend API port         |
 | `POSTGRES_PORT`     | `5433`                   | PostgreSQL exposed port  |
 | `POSTGRES_USER`     | `polluser`               | PostgreSQL username      |
@@ -78,6 +88,7 @@ POSTGRES_PASSWORD=your_db_pass  # Default: pollpass_secure_2024
 2. Open a poll to see the live dashboard
 3. Pick a **display template** from the template row (14 regular + 4 animated)
 4. Click **Share to Viewers** to broadcast to the Viewer screen
+5. Click **Password** (top-right) to change the admin password at any time
 
 ![Groups Selection](docs/groups.png)
 
@@ -148,6 +159,7 @@ docker compose up --build -d
 | Votes not updating           | Ensure the poll was created while the bot was connected|
 | Port already in use          | Set `FRONTEND_PORT` in `.env`                         |
 | Reset everything             | `docker compose down -v` (deletes all data)           |
+| Forgot admin password        | `docker compose down -v` and start fresh              |
 
 ## License
 

@@ -53,3 +53,9 @@ model VoteLog {
   selectedOptionText String
   timestamp        DateTime   @default(now())
 }
+
+model AppSettings {
+  id    String @id @default("singleton")
+  key   String @unique
+  value String
+}
