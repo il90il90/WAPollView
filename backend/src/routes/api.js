@@ -273,13 +273,13 @@ module.exports = function (prisma) {
     try {
       if (pollId !== undefined) {
         if (pollId) {
-          await prisma.appSettings.upsert({ where: { key: "viewer_poll_id" }, update: { value: pollId }, create: { key: "viewer_poll_id", value: pollId } });
+          await prisma.appSettings.upsert({ where: { key: "viewer_poll_id" }, update: { value: pollId }, create: { id: "viewer_poll_id", key: "viewer_poll_id", value: pollId } });
         } else {
           await prisma.appSettings.deleteMany({ where: { key: "viewer_poll_id" } });
         }
       }
       if (template) {
-        await prisma.appSettings.upsert({ where: { key: "viewer_template" }, update: { value: template }, create: { key: "viewer_template", value: template } });
+        await prisma.appSettings.upsert({ where: { key: "viewer_template" }, update: { value: template }, create: { id: "viewer_template", key: "viewer_template", value: template } });
       }
     } catch (e) {
       console.error("[API] Failed to save viewer settings:", e.message);
