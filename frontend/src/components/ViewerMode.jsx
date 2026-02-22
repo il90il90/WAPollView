@@ -39,6 +39,7 @@ export default function ViewerMode({ socket, isConnected, onBack, onAdminClick }
 
   useEffect(() => {
     if (!socket) return;
+    const handleReconnect = () => fetchViewerPoll();
     const handleChange = (data) => {
       if (data?.template) setTemplate(data.template);
       fetchViewerPoll();
@@ -46,9 +47,11 @@ export default function ViewerMode({ socket, isConnected, onBack, onAdminClick }
     const handleTemplateChange = (data) => {
       if (data?.template) setTemplate(data.template);
     };
+    socket.on("connect", handleReconnect);
     socket.on("viewer_poll_changed", handleChange);
     socket.on("viewer_template_changed", handleTemplateChange);
     return () => {
+      socket.off("connect", handleReconnect);
       socket.off("viewer_poll_changed", handleChange);
       socket.off("viewer_template_changed", handleTemplateChange);
     };

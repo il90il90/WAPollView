@@ -1064,6 +1064,10 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
     if (!socket || !poll?.id) return;
     socket.emit("subscribe_to_poll", { pollId: poll.id });
 
+    const handleReconnect = () => {
+      socket.emit("subscribe_to_poll", { pollId: poll.id });
+      fetchData();
+    };
     const handleVote = (data) => {
       if (data.pollId === poll.id) {
         fetchData();
@@ -1079,12 +1083,17 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
     const handleChanged = (data) => {
       if (data.pollId === poll.id) fetchData();
     };
+    const handleHistorySync = () => fetchData();
+    socket.on("connect", handleReconnect);
     socket.on("poll_vote_received", handleVote);
     socket.on("poll_data_changed", handleChanged);
+    socket.on("history_sync_complete", handleHistorySync);
 
     return () => {
+      socket.off("connect", handleReconnect);
       socket.off("poll_vote_received", handleVote);
       socket.off("poll_data_changed", handleChanged);
+      socket.off("history_sync_complete", handleHistorySync);
       socket.emit("unsubscribe_from_poll", { pollId: poll.id });
     };
   }, [socket, poll?.id, fetchData, showVoteToast]);
