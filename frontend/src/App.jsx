@@ -38,12 +38,26 @@ export default function App() {
   const [dpLoading, setDpLoading] = useState(false);
 
   useEffect(() => {
+    if (mode === "admin" && step === 1) {
+      fetch(`${API_BASE}/api/connection-status`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.status === "connected") {
+            setWaStatus("connected");
+            setStep(2);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [mode]);
+
+  useEffect(() => {
     if (!socket) return;
 
     const handleStatus = (data) => {
       setWaStatus(data.status);
       if (data.status === "connected" && step === 1 && mode === "admin") {
-        setTimeout(() => setStep(2), 800);
+        setStep(2);
       }
     };
 
