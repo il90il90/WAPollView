@@ -303,6 +303,29 @@ module.exports = function (prisma) {
     res.json({ success: true, template: activeViewerTemplate });
   });
 
+  router.post("/admin/delete-polls", async (req, res) => {
+    const { password } = req.body;
+    try {
+      const setting = await prisma.appSettings.findUnique({ where: { key: "admin_password" } });
+      if (!setting) {
+        return res.status(400).json({ success: false, error: "Password not configured" });
+      }
+      if (setting.value !== hashPassword(password)) {
+        return res.status(401).json({ success: false, error: "Wrong password" });
+      }
+      const deletedVotes = await prisma.voteLog.deleteMany({});
+      const deletedOptions = await prisma.pollOption.deleteMany({});
+      const deletedPolls = await prisma.poll.deleteMany({});
+      console.log(`[API] Deleted ${deletedPolls.count} polls, ${deletedOptions.count} options, ${deletedVotes.count} votes`);
+      const io = req.app.get("io");
+      if (io) io.emit("polls_deleted", { timestamp: Date.now() });
+      res.json({ success: true, deleted: deletedPolls.count });
+    } catch (err) {
+      console.error("[API] /admin/delete-polls error:", err.message);
+      res.status(500).json({ success: false, error: "Failed to delete polls" });
+    }
+  });
+
   router.post("/admin/wa-logout", async (req, res) => {
     try {
       const { logoutWhatsApp } = require("../whatsapp");
