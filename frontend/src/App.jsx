@@ -30,6 +30,8 @@ export default function App() {
   const [cpError, setCpError] = useState("");
   const [cpSuccess, setCpSuccess] = useState("");
   const [cpLoading, setCpLoading] = useState(false);
+  const [showWaLogout, setShowWaLogout] = useState(false);
+  const [waLogoutLoading, setWaLogoutLoading] = useState(false);
 
   useEffect(() => {
     if (!socket) return;
@@ -118,6 +120,19 @@ export default function App() {
     }
   };
 
+  const handleWaLogout = async () => {
+    setWaLogoutLoading(true);
+    try {
+      await fetch(`${API_BASE}/api/admin/wa-logout`, { method: "POST" });
+      setShowWaLogout(false);
+      setStep(1);
+    } catch {
+      // ignore
+    } finally {
+      setWaLogoutLoading(false);
+    }
+  };
+
   if (!mode) {
     return <ModeSelect onSelect={handleSetMode} isConnected={isConnected} />;
   }
@@ -151,6 +166,16 @@ export default function App() {
             </h1>
           </div>
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowWaLogout(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gray-800/80 border border-gray-700 hover:border-red-500/40 hover:bg-gray-800 text-gray-400 hover:text-red-400 text-xs font-medium transition-all"
+              title="Disconnect WhatsApp"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+              </svg>
+              <span className="hidden sm:inline">Disconnect</span>
+            </button>
             <button
               onClick={() => { setShowChangePassword(true); setCpCurrent(""); setCpNew(""); setCpConfirm(""); setCpError(""); setCpSuccess(""); }}
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gray-800/80 border border-gray-700 hover:border-amber-500/40 hover:bg-gray-800 text-gray-400 hover:text-amber-400 text-xs font-medium transition-all"
@@ -212,6 +237,37 @@ export default function App() {
           <Step4Dashboard socket={socket} poll={selectedPoll} group={selectedGroup} onBack={() => setStep(2)} />
         )}
       </main>
+
+      {showWaLogout && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="card p-6 md:p-8 w-full max-w-sm space-y-5 animate-slide-up">
+            <div className="text-center space-y-2">
+              <div className="w-14 h-14 mx-auto rounded-2xl bg-red-500/20 flex items-center justify-center">
+                <svg className="w-7 h-7 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                </svg>
+              </div>
+              <h2 className="text-lg font-bold">Disconnect WhatsApp</h2>
+              <p className="text-sm text-gray-400">Are you sure you want to disconnect from WhatsApp? You will need to scan the QR code or enter a pairing code again to reconnect.</p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowWaLogout(false)}
+                className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold py-3 rounded-xl text-sm transition-all border border-gray-700"
+              >
+                No
+              </button>
+              <button
+                onClick={handleWaLogout}
+                disabled={waLogoutLoading}
+                className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-40 transition-all"
+              >
+                {waLogoutLoading ? "Disconnecting..." : "Yes"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showChangePassword && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">

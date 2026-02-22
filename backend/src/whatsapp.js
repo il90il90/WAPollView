@@ -857,6 +857,41 @@ async function getAggregatedVotes(pollId, prisma) {
   return { options: result, uniqueVoters };
 }
 
+async function logoutWhatsApp() {
+  try {
+    if (sock) {
+      await sock.logout();
+    }
+  } catch (e) {
+    console.log("[WA] Logout call error (expected):", e.message);
+  }
+  try {
+    const fs = require("fs");
+    if (fs.existsSync(AUTH_DIR)) {
+      const files = fs.readdirSync(AUTH_DIR);
+      for (const file of files) {
+        fs.rmSync(path.join(AUTH_DIR, file), { recursive: true, force: true });
+      }
+      console.log("[WA] Auth info cleared after logout");
+    }
+  } catch (e) {
+    console.error("[WA] Error clearing auth on logout:", e.message);
+  }
+  connectionState = "disconnected";
+  isOnline = false;
+  lastQrBase64 = null;
+  pairingCodeRequested = false;
+  lastPairingPhone = null;
+  sock = null;
+  if (ioRef) {
+    ioRef.emit("connection_status", { status: "disconnected" });
+  }
+  console.log("[WA] Logged out and disconnected");
+  setTimeout(() => {
+    if (ioRef && prismaRef) initWhatsApp(ioRef, prismaRef);
+  }, 3000);
+}
+
 module.exports = {
   initWhatsApp,
   getSock,
@@ -868,4 +903,5 @@ module.exports = {
   getContactName,
   jidToPhone,
   loadGroupParticipantNames,
+  logoutWhatsApp,
 };

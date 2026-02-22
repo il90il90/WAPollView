@@ -303,6 +303,17 @@ module.exports = function (prisma) {
     res.json({ success: true, template: activeViewerTemplate });
   });
 
+  router.post("/admin/wa-logout", async (req, res) => {
+    try {
+      const { logoutWhatsApp } = require("../whatsapp");
+      await logoutWhatsApp();
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[API] /admin/wa-logout error:", err.message);
+      res.status(500).json({ success: false, error: "Failed to disconnect" });
+    }
+  });
+
   router.get("/connection-status", (req, res) => {
     const { getConnectionState } = require("../whatsapp");
     res.json({ status: getConnectionState() });
