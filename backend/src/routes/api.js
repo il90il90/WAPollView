@@ -256,51 +256,97 @@ module.exports = function (prisma) {
     }
   });
 
-  let activeViewerPollId = null;
-  let activeViewerTemplate = "classic";
+  async function getViewerSettings() {
+    try {
+      const pollSetting = await prisma.appSettings.findUnique({ where: { key: "viewer_poll_id" } });
+      const templateSetting = await prisma.appSettings.findUnique({ where: { key: "viewer_template" } });
+      return {
+        pollId: pollSetting?.value || null,
+        template: templateSetting?.value || "classic",
+      };
+    } catch {
+      return { pollId: null, template: "classic" };
+    }
+  }
+
+  async function saveViewerSettings(pollId, template) {
+    try {
+      if (pollId !== undefined) {
+        if (pollId) {
+          await prisma.appSettings.upsert({ where: { key: "viewer_poll_id" }, update: { value: pollId }, create: { key: "viewer_poll_id", value: pollId } });
+        } else {
+          await prisma.appSettings.deleteMany({ where: { key: "viewer_poll_id" } });
+        }
+      }
+      if (template) {
+        await prisma.appSettings.upsert({ where: { key: "viewer_template" }, update: { value: template }, create: { key: "viewer_template", value: template } });
+      }
+    } catch (e) {
+      console.error("[API] Failed to save viewer settings:", e.message);
+    }
+  }
 
   router.get("/viewer-poll", async (req, res) => {
-    if (!activeViewerPollId) {
-      return res.json({ poll: null, group: null, template: activeViewerTemplate });
-    }
     try {
+      const settings = await getViewerSettings();
+      let pollId = settings.pollId;
+      let template = settings.template;
+
+      if (!pollId) {
+        const latestPoll = await prisma.poll.findFirst({
+          orderBy: { createdAt: "desc" },
+          include: { options: true, group: true },
+        });
+        if (latestPoll) {
+          pollId = latestPoll.id;
+          return res.json({ poll: latestPoll, group: latestPoll.group, template });
+        }
+        return res.json({ poll: null, group: null, template });
+      }
+
       const poll = await prisma.poll.findUnique({
-        where: { id: activeViewerPollId },
-        include: { options: true, group: true, _count: { select: { votes: true } } },
+        where: { id: pollId },
+        include: { options: true, group: true },
       });
       if (!poll) {
-        activeViewerPollId = null;
-        return res.json({ poll: null, group: null, template: activeViewerTemplate });
+        await saveViewerSettings(null, undefined);
+        const latestPoll = await prisma.poll.findFirst({
+          orderBy: { createdAt: "desc" },
+          include: { options: true, group: true },
+        });
+        if (latestPoll) {
+          return res.json({ poll: latestPoll, group: latestPoll.group, template });
+        }
+        return res.json({ poll: null, group: null, template });
       }
-      res.json({ poll, group: poll.group, template: activeViewerTemplate });
+      res.json({ poll, group: poll.group, template });
     } catch (err) {
       console.error("[API] /viewer-poll error:", err.message);
       res.status(500).json({ error: "Failed to fetch viewer poll" });
     }
   });
 
-  router.post("/viewer-poll", (req, res) => {
+  router.post("/viewer-poll", async (req, res) => {
     const { pollId, template } = req.body;
-    activeViewerPollId = pollId || null;
-    if (template) activeViewerTemplate = template;
-    console.log(`[API] Viewer poll set to: ${activeViewerPollId}, template: ${activeViewerTemplate}`);
+    await saveViewerSettings(pollId || null, template || undefined);
+    console.log(`[API] Viewer poll set to: ${pollId || null}, template: ${template || "unchanged"}`);
     const io = req.app.get("io");
     if (io) {
-      io.emit("viewer_poll_changed", { pollId: activeViewerPollId, template: activeViewerTemplate });
+      io.emit("viewer_poll_changed", { pollId: pollId || null, template });
     }
-    res.json({ success: true, pollId: activeViewerPollId, template: activeViewerTemplate });
+    res.json({ success: true, pollId: pollId || null, template });
   });
 
-  router.post("/viewer-template", (req, res) => {
+  router.post("/viewer-template", async (req, res) => {
     const { template } = req.body;
     if (!template) return res.status(400).json({ error: "template required" });
-    activeViewerTemplate = template;
-    console.log(`[API] Viewer template set to: ${activeViewerTemplate}`);
+    await saveViewerSettings(undefined, template);
+    console.log(`[API] Viewer template set to: ${template}`);
     const io = req.app.get("io");
     if (io) {
-      io.emit("viewer_template_changed", { template: activeViewerTemplate });
+      io.emit("viewer_template_changed", { template });
     }
-    res.json({ success: true, template: activeViewerTemplate });
+    res.json({ success: true, template });
   });
 
   router.post("/admin/delete-polls", async (req, res) => {
