@@ -160,8 +160,11 @@ function TemplateClassic({ votes, chartData, totalVotes, COLORS: colors, uniqueV
 }
 
 function TemplatePie({ chartData, totalVotes, COLORS: colors, uniqueVoters, isMultiSelect, pctBase }) {
-  const pieData = chartData.filter((d) => d.votes > 0).map((d, i) => ({ ...d, fill: colors[i % colors.length] }));
-  if (pieData.length === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
+  if (chartData.length === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
+  const hasVotes = totalVotes > 0;
+  const pieData = hasVotes
+    ? chartData.filter((d) => d.votes > 0).map((d, i) => ({ ...d, fill: colors[chartData.indexOf(d) % colors.length] }))
+    : chartData.map((d, i) => ({ ...d, votes: 1, fill: colors[i % colors.length] }));
   return (
     <div className="card p-6">
       <ResponsiveContainer width="100%" height={350}>
@@ -194,7 +197,7 @@ function TemplatePie({ chartData, totalVotes, COLORS: colors, uniqueVoters, isMu
 }
 
 function TemplateBars({ chartData, COLORS: colors }) {
-  if (chartData.length === 0 || chartData.every((d) => d.votes === 0)) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
+  if (chartData.length === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
   return (
     <div className="card p-6">
       <ResponsiveContainer width="100%" height={320}>
@@ -212,8 +215,11 @@ function TemplateBars({ chartData, COLORS: colors }) {
 }
 
 function TemplateRadial({ chartData, totalVotes, COLORS: colors }) {
-  const radialData = chartData.filter((d) => d.votes > 0).map((d, i) => ({ ...d, fill: colors[i % colors.length] }));
-  if (radialData.length === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
+  if (chartData.length === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
+  const hasVotes = totalVotes > 0;
+  const radialData = hasVotes
+    ? chartData.filter((d) => d.votes > 0).map((d, i) => ({ ...d, fill: colors[chartData.indexOf(d) % colors.length] }))
+    : chartData.map((d, i) => ({ ...d, votes: 1, fill: colors[i % colors.length] }));
   const leader = radialData.reduce((a, b) => (a.votes > b.votes ? a : b), radialData[0]);
   return (
     <div className="card p-6">
@@ -234,8 +240,8 @@ function TemplateRadial({ chartData, totalVotes, COLORS: colors }) {
 
 function TemplateRace({ votes, totalVotes, COLORS: colors, pctBase }) {
   const sorted = [...votes].sort((a, b) => b.count - a.count);
-  if (sorted.length === 0 || totalVotes === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
-  const max = sorted[0].count;
+  if (sorted.length === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
+  const max = sorted[0].count || 1;
   return (
     <div className="card p-5 space-y-3">
       {sorted.map((v, idx) => {
@@ -264,7 +270,7 @@ function TemplateRace({ votes, totalVotes, COLORS: colors, pctBase }) {
 }
 
 function TemplatePodium({ votes, totalVotes, COLORS: colors, pctBase }) {
-  const sorted = [...votes].filter((v) => v.count > 0).sort((a, b) => b.count - a.count);
+  const sorted = [...votes].sort((a, b) => b.count - a.count);
   if (sorted.length === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
   const top3 = sorted.slice(0, 3);
   const rest = sorted.slice(3);
@@ -319,7 +325,7 @@ function TemplatePodium({ votes, totalVotes, COLORS: colors, pctBase }) {
 
 function TemplateBattle({ votes, totalVotes, COLORS: colors, pctBase }) {
   const sorted = [...votes].sort((a, b) => b.count - a.count);
-  if (sorted.length === 0 || totalVotes === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
+  if (sorted.length === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
 
   if (sorted.length >= 2) {
     const a = sorted[0];
@@ -380,7 +386,7 @@ function TemplateBattle({ votes, totalVotes, COLORS: colors, pctBase }) {
 }
 
 function TemplateGauge({ votes, totalVotes, COLORS: colors, pctBase }) {
-  if (votes.length === 0 || totalVotes === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
+  if (votes.length === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
       {votes.map((v, idx) => {
@@ -413,7 +419,7 @@ function TemplateGauge({ votes, totalVotes, COLORS: colors, pctBase }) {
 }
 
 function TemplateBubbles({ votes, totalVotes, COLORS: colors, pctBase, isMultiSelect, uniqueVoters }) {
-  if (votes.length === 0 || totalVotes === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
+  if (votes.length === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
   const maxCount = Math.max(...votes.map((v) => v.count), 1);
   return (
     <div className="card p-6">
@@ -449,7 +455,7 @@ function TemplateBubbles({ votes, totalVotes, COLORS: colors, pctBase, isMultiSe
 }
 
 function TemplateNeon({ votes, totalVotes, COLORS: colors, pctBase }) {
-  if (votes.length === 0 || totalVotes === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
+  if (votes.length === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
   const sorted = [...votes].sort((a, b) => b.count - a.count);
   return (
     <div className="space-y-3">
@@ -490,7 +496,7 @@ function TemplateNeon({ votes, totalVotes, COLORS: colors, pctBase }) {
 }
 
 function TemplateStadium({ votes, totalVotes, COLORS: colors, pctBase, isMultiSelect, uniqueVoters }) {
-  if (votes.length === 0 || totalVotes === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
+  if (votes.length === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
   const sorted = [...votes].sort((a, b) => b.count - a.count);
   const leader = sorted[0];
   return (
@@ -532,7 +538,7 @@ function TemplateStadium({ votes, totalVotes, COLORS: colors, pctBase, isMultiSe
 }
 
 function TemplateWaffle({ votes, totalVotes, COLORS: colors, pctBase, isMultiSelect, uniqueVoters }) {
-  if (votes.length === 0 || totalVotes === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
+  if (votes.length === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
   const gridSize = 100;
   const cells = [];
   let filled = 0;
@@ -575,9 +581,9 @@ function TemplateWaffle({ votes, totalVotes, COLORS: colors, pctBase, isMultiSel
 }
 
 function TemplateFunnel({ votes, totalVotes, COLORS: colors, pctBase, isMultiSelect, uniqueVoters }) {
-  const sorted = [...votes].filter((v) => v.count > 0).sort((a, b) => b.count - a.count);
+  const sorted = [...votes].sort((a, b) => b.count - a.count);
   if (sorted.length === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
-  const max = sorted[0].count;
+  const max = sorted[0].count || 1;
   return (
     <div className="card p-5 space-y-2">
       {sorted.map((v, idx) => {
@@ -610,7 +616,7 @@ function TemplateFunnel({ votes, totalVotes, COLORS: colors, pctBase, isMultiSel
 }
 
 function TemplateEmoji({ votes, totalVotes, COLORS: colors, pctBase }) {
-  if (votes.length === 0 || totalVotes === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
+  if (votes.length === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
   const sorted = [...votes].sort((a, b) => b.count - a.count);
   const emojiList = ["🔥", "⚡", "💎", "🚀", "🌟", "💥", "🎯", "👑", "⭐", "🏅"];
   return (
@@ -648,7 +654,7 @@ function TemplateEmoji({ votes, totalVotes, COLORS: colors, pctBase }) {
 }
 
 function TemplatePulse({ votes, totalVotes, COLORS: colors, pctBase }) {
-  if (votes.length === 0 || totalVotes === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
+  if (votes.length === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
   const sorted = [...votes].sort((a, b) => b.count - a.count);
   const max = sorted[0].count || 1;
 
@@ -722,7 +728,7 @@ function TemplatePulse({ votes, totalVotes, COLORS: colors, pctBase }) {
 }
 
 function TemplateSlots({ votes, totalVotes, COLORS: colors, pctBase, isMultiSelect, uniqueVoters }) {
-  if (votes.length === 0 || totalVotes === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
+  if (votes.length === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
   const sorted = [...votes].sort((a, b) => b.count - a.count);
   const tickerText = sorted.map((v) => `${v.optionText}: ${v.count} votes`).join("   ★   ");
 
@@ -775,7 +781,7 @@ function TemplateSlots({ votes, totalVotes, COLORS: colors, pctBase, isMultiSele
 }
 
 function TemplateParticles({ votes, totalVotes, COLORS: colors, pctBase, isMultiSelect, uniqueVoters }) {
-  if (votes.length === 0 || totalVotes === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
+  if (votes.length === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
   const sorted = [...votes].sort((a, b) => b.count - a.count);
   const max = sorted[0].count || 1;
 
@@ -841,7 +847,7 @@ function TemplateParticles({ votes, totalVotes, COLORS: colors, pctBase, isMulti
 }
 
 function TemplateBigScreen({ votes, totalVotes, COLORS: colors, pctBase, isMultiSelect, uniqueVoters }) {
-  if (votes.length === 0 || totalVotes === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
+  if (votes.length === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
   const sorted = [...votes].sort((a, b) => b.count - a.count);
   const max = sorted[0].count || 1;
   const tickerText = sorted.map((v) => `${v.optionText} — ${v.count}`).join("     ★     ");
