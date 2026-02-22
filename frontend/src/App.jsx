@@ -36,6 +36,12 @@ export default function App() {
   const [dpPassword, setDpPassword] = useState("");
   const [dpError, setDpError] = useState("");
   const [dpLoading, setDpLoading] = useState(false);
+  const [showAdminLogin, setShowAdminLogin] = useState(false);
+  const [adminPw, setAdminPw] = useState("");
+  const [adminPwConfirm, setAdminPwConfirm] = useState("");
+  const [adminLoginError, setAdminLoginError] = useState("");
+  const [adminLoginLoading, setAdminLoginLoading] = useState(false);
+  const [isAdminConfigured, setIsAdminConfigured] = useState(null);
 
   useEffect(() => {
     if (mode === "admin" && step === 1) {
@@ -79,7 +85,7 @@ export default function App() {
   }, []);
 
   const handleLogout = useCallback(() => {
-    handleSetMode(null);
+    handleSetMode("viewer");
     setStep(1);
     setSelectedGroup(null);
     setSelectedPoll(null);
@@ -166,6 +172,66 @@ export default function App() {
     }
   };
 
+  const handleAdminClick = useCallback(() => {
+    setAdminPw("");
+    setAdminPwConfirm("");
+    setAdminLoginError("");
+    fetch(`${API_BASE}/api/admin/setup-status`)
+      .then((r) => r.json())
+      .then((data) => {
+        setIsAdminConfigured(data.isConfigured);
+        setShowAdminLogin(true);
+      })
+      .catch(() => {
+        setIsAdminConfigured(false);
+        setShowAdminLogin(true);
+      });
+  }, []);
+
+  const handleAdminLoginSubmit = async (e) => {
+    e.preventDefault();
+    setAdminLoginError("");
+    if (isAdminConfigured === false) {
+      if (adminPw.length < 4) { setAdminLoginError("Password must be at least 4 characters"); return; }
+      if (adminPw !== adminPwConfirm) { setAdminLoginError("Passwords don't match"); return; }
+      setAdminLoginLoading(true);
+      try {
+        const res = await fetch(`${API_BASE}/api/admin/setup`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password: adminPw }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          setShowAdminLogin(false);
+          handleSetMode("admin");
+        } else {
+          setAdminLoginError(data.error || "Setup failed");
+        }
+      } catch { setAdminLoginError("Connection error"); }
+      finally { setAdminLoginLoading(false); }
+    } else {
+      if (!adminPw.trim()) return;
+      setAdminLoginLoading(true);
+      try {
+        const res = await fetch(`${API_BASE}/api/admin/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password: adminPw }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          setShowAdminLogin(false);
+          handleSetMode("admin");
+        } else {
+          setAdminLoginError("Wrong password");
+          setAdminPw("");
+        }
+      } catch { setAdminLoginError("Connection error"); }
+      finally { setAdminLoginLoading(false); }
+    }
+  };
+
   const handleWaLogout = async () => {
     setWaLogoutLoading(true);
     try {
@@ -179,17 +245,50 @@ export default function App() {
     }
   };
 
-  if (!mode) {
-    return <ModeSelect onSelect={handleSetMode} isConnected={isConnected} />;
-  }
-
-  if (mode === "viewer") {
+  if (!mode || mode === "viewer") {
     return (
-      <ViewerMode
-        socket={socket}
-        isConnected={isConnected}
-        onBack={handleLogout}
-      />
+      <>
+        <ViewerMode
+          socket={socket}
+          isConnected={isConnected}
+          onAdminClick={handleAdminClick}
+        />
+        {showAdminLogin && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <div className="card p-6 md:p-8 w-full max-w-sm space-y-5 animate-slide-up">
+              <div className="text-center space-y-2">
+                <div className="w-14 h-14 mx-auto rounded-2xl bg-wa-green/20 flex items-center justify-center">
+                  <svg className="w-7 h-7 text-wa-green" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                      d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                </div>
+                <h2 className="text-lg font-bold">{isAdminConfigured === false ? "First Time Setup" : "Admin Login"}</h2>
+                <p className="text-gray-500 text-xs">
+                  {isAdminConfigured === false ? "Choose an admin password to get started" : "Enter the admin password to continue"}
+                </p>
+              </div>
+              <form onSubmit={handleAdminLoginSubmit} className="space-y-3">
+                <input type="password" placeholder={isAdminConfigured === false ? "Choose admin password" : "Password"} value={adminPw}
+                  onChange={(e) => { setAdminPw(e.target.value); setAdminLoginError(""); }} autoFocus
+                  className="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 text-sm text-center tracking-widest focus:outline-none focus:border-wa-green/50 focus:ring-1 focus:ring-wa-green/20 transition-all placeholder-gray-600" />
+                {isAdminConfigured === false && (
+                  <input type="password" placeholder="Confirm password" value={adminPwConfirm}
+                    onChange={(e) => { setAdminPwConfirm(e.target.value); setAdminLoginError(""); }}
+                    className="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 text-sm text-center tracking-widest focus:outline-none focus:border-wa-green/50 focus:ring-1 focus:ring-wa-green/20 transition-all placeholder-gray-600" />
+                )}
+                {adminLoginError && <p className="text-red-400 text-xs text-center">{adminLoginError}</p>}
+                <button type="submit" disabled={adminLoginLoading || !adminPw.trim()}
+                  className="w-full btn-primary py-3 text-sm font-medium disabled:opacity-40">
+                  {adminLoginLoading ? "Verifying..." : isAdminConfigured === false ? "Set Password & Enter" : "Enter"}
+                </button>
+              </form>
+              <button onClick={() => setShowAdminLogin(false)}
+                className="w-full text-center text-xs text-gray-500 hover:text-gray-300 transition-colors">Cancel</button>
+            </div>
+          </div>
+        )}
+      </>
     );
   }
 
