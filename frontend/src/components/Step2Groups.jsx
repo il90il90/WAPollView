@@ -210,6 +210,9 @@ export default function Step2Groups({ socket, onSelectPoll, onNewPoll }) {
                           </div>
                           <div className="text-left min-w-0">
                             <p className="text-sm font-medium truncate">{poll.title}</p>
+                            <p className="text-[10px] text-gray-600">
+                              {new Date(poll.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                            </p>
                             <p className="text-xs text-gray-500">
                               {poll.options.length} options · {poll._count?.votes || 0} votes
                             </p>
