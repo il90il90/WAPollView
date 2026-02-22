@@ -1379,7 +1379,7 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
 
       {lastUpdate && (
         <p className="text-center text-[10px] text-gray-600">
-          Last update: {lastUpdate.toLocaleTimeString()} · Auto-refresh every 8s
+          Last update: {lastUpdate.toLocaleTimeString()}
         </p>
       )}
     </div>
