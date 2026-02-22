@@ -141,20 +141,6 @@ function TemplateClassic({ votes, chartData, totalVotes, COLORS: colors, uniqueV
         })}
         {votes.length === 0 && <div className="text-center py-6 text-gray-600 text-sm">No votes yet. Waiting for responses...</div>}
       </div>
-      {chartData.length > 0 && totalVotes > 0 && (
-        <div className="card p-4">
-          <ResponsiveContainer width="100%" height={Math.max(120, chartData.length * 40)}>
-            <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
-              <XAxis type="number" hide />
-              <YAxis type="category" dataKey="name" width={90} tick={{ fill: "#9CA3AF", fontSize: 10 }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={{ background: "#1F2937", border: "1px solid #374151", borderRadius: "12px", color: "#F9FAFB", fontSize: "12px" }} formatter={(value, _, props) => [`${value} votes`, props.payload.fullName]} cursor={{ fill: "rgba(37, 211, 102, 0.05)" }} />
-              <Bar dataKey="votes" radius={[0, 8, 8, 0]} barSize={22} animationDuration={600}>
-                {chartData.map((_, idx) => (<Cell key={idx} fill={colors[idx % colors.length]} fillOpacity={0.85} />))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
     </div>
   );
 }
