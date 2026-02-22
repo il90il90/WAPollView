@@ -317,25 +317,38 @@ async function handleMessagesUpdate(updates, prisma, io) {
           console.log("[Vote] Decrypted votes:", JSON.stringify(votes));
           if (!votes || votes.length === 0) continue;
 
-          const voterJid = pollUpdate.pollUpdateMessageKey?.participant || pollUpdate.senderJid || "unknown";
+          const rawVoterJid = pollUpdate.pollUpdateMessageKey?.participant || pollUpdate.senderJid || "unknown";
+          const voterJid = rawVoterJid.replace("@lid", "@s.whatsapp.net");
+          const voterName = getContactName(voterJid) || getContactName(rawVoterJid) || null;
+          const voterPhone = jidToPhone(rawVoterJid) || jidToPhone(voterJid) || null;
+          const selectedTexts = [];
 
           for (const vote of votes) {
             if (vote.voters && vote.voters.length > 0) {
               const optionName = vote.name;
+              selectedTexts.push(optionName);
               const matchedOption = dbPoll.options.find((o) => o.optionText === optionName);
 
               for (const voter of vote.voters) {
                 const normalizedVoter = (voter || voterJid).replace("@lid", "@s.whatsapp.net");
                 await prisma.voteLog.create({
-                  data: { pollId: dbPoll.id, optionId: matchedOption?.id || null, voterJid: normalizedVoter, selectedOptionText: optionName },
+                  data: { pollId: dbPoll.id, optionId: matchedOption?.id || null, voterJid: normalizedVoter, voterName: voterName || getContactName(normalizedVoter), voterPhone: voterPhone || jidToPhone(normalizedVoter), selectedOptionText: optionName },
                 });
                 console.log(`[Vote] Recorded: ${normalizedVoter} -> "${optionName}" in "${dbPoll.title}"`);
               }
             }
           }
 
+          const selectedOption = selectedTexts.join("|") || null;
           const aggregated = await getAggregatedVotes(dbPoll.id, prisma);
-          io.to(dbPoll.id).emit("poll_vote_received", { pollId: dbPoll.id, votes: aggregated.options, uniqueVoters: aggregated.uniqueVoters, timestamp: Date.now() });
+          io.to(dbPoll.id).emit("poll_vote_received", {
+            pollId: dbPoll.id,
+            votes: aggregated.options,
+            uniqueVoters: aggregated.uniqueVoters,
+            voter: { name: voterName, jid: voterJid, phone: voterPhone },
+            selectedOption,
+            timestamp: Date.now(),
+          });
           io.emit("poll_data_changed", { pollId: dbPoll.id, timestamp: Date.now() });
         } catch (decryptErr) {
           console.error("[Vote] Decryption/processing error:", decryptErr.message);

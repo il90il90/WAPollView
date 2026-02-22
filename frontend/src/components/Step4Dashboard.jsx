@@ -30,44 +30,468 @@ function voterDisplay(voter) {
   };
 }
 
-function fireConfetti() {
-  const count = 80;
-  const defaults = { origin: { y: 0.7 }, zIndex: 9999 };
-  confetti({ ...defaults, particleCount: count, spread: 80, startVelocity: 35, colors: ["#25D366", "#34B7F1", "#FFA726", "#FF6B6B", "#AB47BC"] });
-  setTimeout(() => {
-    confetti({ ...defaults, particleCount: count / 2, spread: 60, startVelocity: 25, origin: { x: 0.3, y: 0.6 }, colors: ["#25D366", "#66BB6A", "#26A69A"] });
-  }, 150);
-  setTimeout(() => {
-    confetti({ ...defaults, particleCount: count / 2, spread: 60, startVelocity: 25, origin: { x: 0.7, y: 0.6 }, colors: ["#34B7F1", "#42A5F5", "#FFA000"] });
-  }, 300);
+const VOTE_EFFECTS = [
+  { key: "none", label: "None", icon: "🔇" },
+  { key: "confetti", label: "Confetti", icon: "🎊" },
+  { key: "fireworks", label: "Fireworks", icon: "🎆" },
+  { key: "hearts", label: "Hearts", icon: "💖" },
+  { key: "stars", label: "Stars", icon: "⭐" },
+  { key: "snow", label: "Snow", icon: "❄️" },
+  { key: "emoji", label: "Emoji Rain", icon: "🎉" },
+  { key: "thunder", label: "Thunder", icon: "⚡" },
+  { key: "bubbles", label: "Bubbles", icon: "🫧" },
+  { key: "spotlight", label: "Spotlight", icon: "🔦" },
+  { key: "cannon", label: "Cannon", icon: "💥" },
+  { key: "matrix", label: "Matrix", icon: "🟩" },
+  { key: "laser", label: "Laser Show", icon: "🔴" },
+  { key: "galaxy", label: "Galaxy", icon: "🌌" },
+  { key: "wave", label: "Wave", icon: "🌊" },
+  { key: "tornado", label: "Tornado", icon: "🌪️" },
+  { key: "rainbow", label: "Rainbow", icon: "🌈" },
+  { key: "fire", label: "Fire", icon: "🔥" },
+  { key: "diamonds", label: "Diamonds", icon: "💎" },
+  { key: "applause", label: "Applause", icon: "👏" },
+  { key: "flower", label: "Flower Bloom", icon: "🌸" },
+  { key: "random", label: "Random", icon: "🎲" },
+];
+
+function fireEffect(effectKey) {
+  if (effectKey === "random") {
+    const pool = VOTE_EFFECTS.filter((e) => e.key !== "none" && e.key !== "random");
+    effectKey = pool[Math.floor(Math.random() * pool.length)].key;
+  }
+  const z = 9999;
+  switch (effectKey) {
+    case "confetti": {
+      const count = 80;
+      const defaults = { origin: { y: 0.7 }, zIndex: z };
+      confetti({ ...defaults, particleCount: count, spread: 80, startVelocity: 35, colors: ["#25D366", "#34B7F1", "#FFA726", "#FF6B6B", "#AB47BC"] });
+      setTimeout(() => confetti({ ...defaults, particleCount: count / 2, spread: 60, startVelocity: 25, origin: { x: 0.3, y: 0.6 }, colors: ["#25D366", "#66BB6A", "#26A69A"] }), 150);
+      setTimeout(() => confetti({ ...defaults, particleCount: count / 2, spread: 60, startVelocity: 25, origin: { x: 0.7, y: 0.6 }, colors: ["#34B7F1", "#42A5F5", "#FFA000"] }), 300);
+      break;
+    }
+    case "fireworks": {
+      const duration = 1500;
+      const end = Date.now() + duration;
+      const interval = setInterval(() => {
+        if (Date.now() > end) return clearInterval(interval);
+        confetti({
+          particleCount: 40, spread: 360, startVelocity: 30,
+          origin: { x: Math.random(), y: Math.random() * 0.4 },
+          colors: ["#FF0000", "#FF7700", "#FFDD00", "#00FF00", "#00DDFF", "#FF00FF"],
+          ticks: 60, gravity: 1.2, scalar: 1.2, zIndex: z,
+        });
+      }, 250);
+      break;
+    }
+    case "hearts": {
+      const heart = confetti.shapeFromPath({ path: "M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" });
+      for (let i = 0; i < 3; i++) {
+        setTimeout(() => {
+          confetti({
+            particleCount: 25, spread: 70, startVelocity: 30,
+            origin: { x: 0.2 + Math.random() * 0.6, y: 0.5 + Math.random() * 0.3 },
+            colors: ["#FF1744", "#FF4081", "#F50057", "#E91E63", "#FF80AB"],
+            shapes: [heart], scalar: 2, zIndex: z, gravity: 0.8, drift: 0,
+          });
+        }, i * 200);
+      }
+      break;
+    }
+    case "stars": {
+      const star = confetti.shapeFromPath({ path: "M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 22 12 18.56 5.82 22 7 14.14l-5-4.87 6.91-1.01L12 2z" });
+      for (let i = 0; i < 3; i++) {
+        setTimeout(() => {
+          confetti({
+            particleCount: 30, spread: 80, startVelocity: 35,
+            origin: { x: 0.3 + i * 0.2, y: 0.6 },
+            colors: ["#FFD700", "#FFA000", "#FFE082", "#FFFFFF", "#FFC107"],
+            shapes: [star], scalar: 2, zIndex: z, gravity: 0.7, ticks: 100,
+          });
+        }, i * 180);
+      }
+      break;
+    }
+    case "snow": {
+      const duration = 2000;
+      const end = Date.now() + duration;
+      const interval = setInterval(() => {
+        if (Date.now() > end) return clearInterval(interval);
+        confetti({
+          particleCount: 15, spread: 160, startVelocity: 5,
+          origin: { x: Math.random(), y: -0.1 },
+          colors: ["#FFFFFF", "#E3F2FD", "#BBDEFB", "#90CAF9", "#B3E5FC"],
+          ticks: 200, gravity: 0.3, drift: Math.random() * 2 - 1,
+          scalar: 1.5, shapes: ["circle"], zIndex: z,
+        });
+      }, 150);
+      break;
+    }
+    case "emoji": {
+      const emojis = ["🎉", "🔥", "💪", "👏", "🙌", "✅", "🏆", "⚡"];
+      for (let i = 0; i < 4; i++) {
+        setTimeout(() => {
+          const emojiShape = confetti.shapeFromText({ text: emojis[Math.floor(Math.random() * emojis.length)], scalar: 12 });
+          confetti({
+            particleCount: 8, spread: 60, startVelocity: 25,
+            origin: { x: 0.2 + Math.random() * 0.6, y: 0.5 + Math.random() * 0.3 },
+            shapes: [emojiShape], scalar: 3, gravity: 0.6, ticks: 120, zIndex: z,
+            flat: true,
+          });
+        }, i * 200);
+      }
+      break;
+    }
+    case "thunder": {
+      const bolt = confetti.shapeFromPath({ path: "M13 0L0 13h9l-1 11L21 11h-9l1-11z" });
+      confetti({ particleCount: 15, spread: 40, startVelocity: 55, origin: { x: 0.5, y: 0.2 }, colors: ["#FFD600", "#FFFF00", "#FFC107"], shapes: [bolt], scalar: 2.5, gravity: 1.5, ticks: 80, zIndex: z });
+      setTimeout(() => {
+        confetti({ particleCount: 50, spread: 100, startVelocity: 40, origin: { x: 0.5, y: 0.5 }, colors: ["#FFD600", "#FFA000", "#FFFFFF", "#B388FF"], ticks: 70, gravity: 1, zIndex: z });
+      }, 100);
+      setTimeout(() => {
+        confetti({ particleCount: 10, spread: 30, startVelocity: 50, origin: { x: 0.3, y: 0.3 }, colors: ["#FFD600", "#FFFF00"], shapes: [bolt], scalar: 2, gravity: 1.5, ticks: 60, zIndex: z });
+        confetti({ particleCount: 10, spread: 30, startVelocity: 50, origin: { x: 0.7, y: 0.3 }, colors: ["#FFD600", "#FFFF00"], shapes: [bolt], scalar: 2, gravity: 1.5, ticks: 60, zIndex: z });
+      }, 300);
+      break;
+    }
+    case "bubbles": {
+      const duration = 2000;
+      const end = Date.now() + duration;
+      const interval = setInterval(() => {
+        if (Date.now() > end) return clearInterval(interval);
+        confetti({
+          particleCount: 8, spread: 120, startVelocity: 8,
+          origin: { x: Math.random(), y: 1.0 },
+          colors: ["#80DEEA", "#4DD0E1", "#00BCD4", "#B2EBF2", "#E0F7FA", "#FFFFFF"],
+          ticks: 250, gravity: -0.15, drift: Math.random() * 1 - 0.5,
+          scalar: 2, shapes: ["circle"], zIndex: z,
+        });
+      }, 120);
+      break;
+    }
+    case "spotlight": {
+      confetti({ particleCount: 100, spread: 30, startVelocity: 50, origin: { x: 0.5, y: 1.0 }, colors: ["#FFD700", "#FFC107", "#FFEB3B", "#FFFFFF"], ticks: 100, gravity: 0.8, scalar: 1.5, zIndex: z });
+      setTimeout(() => confetti({ particleCount: 60, spread: 20, startVelocity: 45, origin: { x: 0.5, y: 1.0 }, colors: ["#FFD700", "#FFFFFF", "#FFF9C4"], ticks: 90, gravity: 0.7, scalar: 1.2, zIndex: z }), 200);
+      setTimeout(() => confetti({ particleCount: 40, spread: 15, startVelocity: 40, origin: { x: 0.5, y: 1.0 }, colors: ["#FFD700", "#FFC107"], ticks: 80, gravity: 0.6, scalar: 1, zIndex: z }), 400);
+      break;
+    }
+    case "cannon": {
+      confetti({ particleCount: 60, angle: 60, spread: 50, startVelocity: 55, origin: { x: 0, y: 0.8 }, colors: ["#FF1744", "#FF5252", "#FF8A80", "#FFAB40", "#FFD740"], ticks: 80, zIndex: z });
+      confetti({ particleCount: 60, angle: 120, spread: 50, startVelocity: 55, origin: { x: 1, y: 0.8 }, colors: ["#2979FF", "#448AFF", "#82B1FF", "#00E5FF", "#18FFFF"], ticks: 80, zIndex: z });
+      setTimeout(() => {
+        confetti({ particleCount: 40, angle: 80, spread: 40, startVelocity: 50, origin: { x: 0, y: 0.9 }, colors: ["#76FF03", "#64DD17", "#AEEA00", "#EEFF41"], ticks: 70, zIndex: z });
+        confetti({ particleCount: 40, angle: 100, spread: 40, startVelocity: 50, origin: { x: 1, y: 0.9 }, colors: ["#E040FB", "#D500F9", "#AA00FF", "#EA80FC"], ticks: 70, zIndex: z });
+      }, 250);
+      break;
+    }
+    case "matrix": {
+      const duration = 2000;
+      const end = Date.now() + duration;
+      const interval = setInterval(() => {
+        if (Date.now() > end) return clearInterval(interval);
+        confetti({
+          particleCount: 12, spread: 180, startVelocity: 15,
+          origin: { x: Math.random(), y: -0.1 },
+          colors: ["#00FF41", "#00CC33", "#009926", "#33FF66", "#66FF99"],
+          ticks: 150, gravity: 0.8, drift: 0,
+          scalar: 1.2, shapes: ["square"], zIndex: z,
+        });
+      }, 80);
+      break;
+    }
+    case "laser": {
+      const corners = [
+        { x: 0, y: 0 }, { x: 1, y: 0 },
+        { x: 0, y: 1 }, { x: 1, y: 1 },
+      ];
+      const laserColors = [
+        ["#FF0000", "#FF4444", "#FF8888"],
+        ["#00FF00", "#44FF44", "#88FF88"],
+        ["#0088FF", "#44AAFF", "#88CCFF"],
+        ["#FF00FF", "#FF44FF", "#FF88FF"],
+      ];
+      corners.forEach((origin, i) => {
+        setTimeout(() => {
+          confetti({
+            particleCount: 20, spread: 15, startVelocity: 70,
+            origin, colors: laserColors[i],
+            ticks: 50, gravity: 0.3, scalar: 0.8, zIndex: z,
+            angle: i < 2 ? (i === 0 ? 315 : 225) : (i === 2 ? 45 : 135),
+          });
+        }, i * 100);
+      });
+      setTimeout(() => {
+        confetti({ particleCount: 40, spread: 10, startVelocity: 65, origin: { x: 0.5, y: 0 }, angle: 270, colors: ["#FFFFFF", "#00FFFF", "#FF00FF"], ticks: 60, gravity: 0.5, zIndex: z });
+      }, 500);
+      break;
+    }
+    case "galaxy": {
+      const arms = 5;
+      for (let i = 0; i < arms; i++) {
+        const angle = (360 / arms) * i;
+        const rad = (angle * Math.PI) / 180;
+        const ox = 0.5 + Math.cos(rad) * 0.15;
+        const oy = 0.5 + Math.sin(rad) * 0.15;
+        setTimeout(() => {
+          confetti({
+            particleCount: 20, spread: 40, startVelocity: 30,
+            origin: { x: ox, y: oy }, angle: angle,
+            colors: ["#7C4DFF", "#B388FF", "#E040FB", "#EA80FC", "#CE93D8", "#FFFFFF"],
+            ticks: 100, gravity: 0.4, scalar: 1.3, drift: 0.5, zIndex: z,
+          });
+        }, i * 120);
+      }
+      setTimeout(() => {
+        confetti({
+          particleCount: 30, spread: 360, startVelocity: 10,
+          origin: { x: 0.5, y: 0.5 },
+          colors: ["#FFFFFF", "#E1BEE7", "#F3E5F5"],
+          ticks: 120, gravity: 0.1, scalar: 0.8, zIndex: z,
+        });
+      }, arms * 120 + 100);
+      break;
+    }
+    case "wave": {
+      const steps = 8;
+      for (let i = 0; i < steps; i++) {
+        setTimeout(() => {
+          const x = (i + 0.5) / steps;
+          const y = 0.5 + Math.sin((i / steps) * Math.PI * 2) * 0.15;
+          confetti({
+            particleCount: 15, spread: 50, startVelocity: 25,
+            origin: { x, y },
+            colors: ["#0277BD", "#0288D1", "#039BE5", "#03A9F4", "#29B6F6", "#4FC3F7", "#81D4FA", "#FFFFFF"],
+            ticks: 80, gravity: 0.6, scalar: 1.2, zIndex: z,
+          });
+        }, i * 100);
+      }
+      break;
+    }
+    case "tornado": {
+      const rings = 6;
+      for (let i = 0; i < rings; i++) {
+        const radius = 0.25 - i * 0.035;
+        const angleOffset = i * 60;
+        for (let j = 0; j < 3; j++) {
+          const a = ((angleOffset + j * 120) * Math.PI) / 180;
+          const ox = 0.5 + Math.cos(a) * radius;
+          const oy = 0.5 + Math.sin(a) * radius;
+          setTimeout(() => {
+            confetti({
+              particleCount: 10, spread: 30 + i * 5, startVelocity: 20 + i * 5,
+              origin: { x: ox, y: oy },
+              colors: ["#78909C", "#90A4AE", "#B0BEC5", "#CFD8DC", "#ECEFF1", "#546E7A"],
+              ticks: 60, gravity: 0.5 + i * 0.1, scalar: 1 + i * 0.1, zIndex: z,
+            });
+          }, i * 80 + j * 30);
+        }
+      }
+      break;
+    }
+    case "rainbow": {
+      const rainbowColors = [
+        ["#FF0000"], ["#FF7700"], ["#FFDD00"],
+        ["#00CC00"], ["#0066FF"], ["#4400CC"], ["#8800AA"],
+      ];
+      rainbowColors.forEach((colors, i) => {
+        setTimeout(() => {
+          const angle = 150 - i * 10;
+          confetti({
+            particleCount: 18, spread: 15, startVelocity: 40 + i * 3,
+            origin: { x: 0.1 + i * 0.02, y: 0.9 },
+            colors, angle,
+            ticks: 90, gravity: 0.7, scalar: 1.3, zIndex: z,
+          });
+          confetti({
+            particleCount: 18, spread: 15, startVelocity: 40 + i * 3,
+            origin: { x: 0.9 - i * 0.02, y: 0.9 },
+            colors, angle: 180 - angle + 180,
+            ticks: 90, gravity: 0.7, scalar: 1.3, zIndex: z,
+          });
+        }, i * 80);
+      });
+      break;
+    }
+    case "fire": {
+      const duration = 1800;
+      const end = Date.now() + duration;
+      const interval = setInterval(() => {
+        if (Date.now() > end) return clearInterval(interval);
+        const x = 0.3 + Math.random() * 0.4;
+        confetti({
+          particleCount: 10, spread: 40, startVelocity: 30,
+          origin: { x, y: 1.0 }, angle: 90,
+          colors: ["#FF6D00", "#FF9100", "#FFAB00", "#FFD600", "#DD2C00", "#FF3D00"],
+          ticks: 70, gravity: 0.4, scalar: 1.5, drift: (Math.random() - 0.5) * 0.5,
+          zIndex: z,
+        });
+      }, 80);
+      break;
+    }
+    case "diamonds": {
+      const diamond = confetti.shapeFromPath({ path: "M12 2L2 12l10 10 10-10L12 2z" });
+      for (let i = 0; i < 4; i++) {
+        setTimeout(() => {
+          confetti({
+            particleCount: 12, spread: 140, startVelocity: 15,
+            origin: { x: Math.random(), y: -0.1 },
+            colors: ["#B3E5FC", "#E1F5FE", "#FFFFFF", "#80DEEA", "#4DD0E1", "#00BCD4"],
+            shapes: [diamond], scalar: 2, gravity: 0.5,
+            drift: Math.random() - 0.5, ticks: 150, zIndex: z,
+          });
+        }, i * 200);
+      }
+      setTimeout(() => {
+        confetti({
+          particleCount: 20, spread: 100, startVelocity: 20,
+          origin: { x: 0.5, y: 0.5 },
+          colors: ["#FFFFFF", "#E0F7FA", "#B2EBF2"],
+          shapes: [diamond], scalar: 2.5, gravity: 0.3, ticks: 100, zIndex: z,
+        });
+      }, 900);
+      break;
+    }
+    case "applause": {
+      const hands = ["👏", "🙌", "👐", "🤲"];
+      for (let i = 0; i < 5; i++) {
+        setTimeout(() => {
+          const shape = confetti.shapeFromText({ text: hands[i % hands.length], scalar: 12 });
+          confetti({
+            particleCount: 6, spread: 80, startVelocity: 25,
+            origin: { x: 0.15 + Math.random() * 0.7, y: 0.6 + Math.random() * 0.3 },
+            shapes: [shape], scalar: 3, gravity: 0.7, ticks: 100, zIndex: z,
+            flat: true,
+          });
+        }, i * 150);
+      }
+      break;
+    }
+    case "flower": {
+      const petals = ["🌸", "🌺", "🌷", "🌹", "🏵️", "💐"];
+      for (let i = 0; i < 5; i++) {
+        setTimeout(() => {
+          const shape = confetti.shapeFromText({ text: petals[i % petals.length], scalar: 12 });
+          confetti({
+            particleCount: 8, spread: 360, startVelocity: 20 + i * 5,
+            origin: { x: 0.5, y: 0.5 },
+            shapes: [shape], scalar: 3, gravity: 0.4, ticks: 130, zIndex: z,
+            flat: true, drift: Math.random() - 0.5,
+          });
+        }, i * 180);
+      }
+      break;
+    }
+    case "none":
+    default:
+      break;
+  }
 }
 
-function VoteSplash({ splash }) {
-  if (!splash) return null;
+const SPLASH_SHAPES = ["circle", "card", "diamond", "hexagon", "star"];
+
+function SplashBubble({ splash }) {
   const displayName = splash.voterName || splash.voterPhone || "Someone";
+  const choices = (splash.selectedOption || "").split("|").filter(Boolean);
+  const s = splash.shape || "circle";
+
   const nameLen = displayName.length;
-  const size = Math.max(100, Math.min(220, 80 + nameLen * 12));
-  const fontSize = Math.max(14, Math.min(28, 26 - nameLen * 0.6));
-  return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center pointer-events-none">
-      <div className="animate-vote-splash text-center">
+  const circleSize = Math.max(70, Math.min(160, 50 + nameLen * 7));
+  const circleFontSize = Math.max(11, Math.min(22, 22 - nameLen * 0.5));
+  const choiceFontSize = Math.max(12, Math.min(18, 18 - nameLen * 0.3));
+
+  const choiceBlock = (
+    <div className="flex flex-wrap justify-center gap-1 mt-0.5">
+      {choices.map((opt, i) => (
+        <span key={i} className="font-black text-wa-green drop-shadow-[0_0_12px_rgba(37,211,102,0.6)]" style={{ fontSize: choiceFontSize }}>
+          {opt}
+        </span>
+      ))}
+    </div>
+  );
+
+  let inner;
+  if (s === "circle") {
+    inner = (
+      <>
         <div
-          className="mx-auto mb-4 rounded-full bg-wa-green/20 border-4 border-wa-green/50 flex items-center justify-center font-bold text-wa-green shadow-2xl shadow-wa-green/30 animate-bounce-in p-3"
-          style={{ width: size, height: size, fontSize }}
+          className="mx-auto mb-1.5 rounded-full bg-wa-green/20 border-3 border-wa-green/50 flex items-center justify-center font-bold text-wa-green shadow-xl shadow-wa-green/30 animate-bounce-in p-2"
+          style={{ width: circleSize, height: circleSize, fontSize: circleFontSize }}
         >
           <span className="text-center leading-tight break-words max-w-[90%]">{displayName}</span>
         </div>
-        <p className="text-lg md:text-xl text-gray-300 mt-2 font-medium">
-          voted for
-        </p>
-        <div className="flex flex-wrap justify-center gap-2 mt-1">
-          {(splash.selectedOption || "").split("|").map((opt, i) => (
-            <p key={i} className="text-2xl md:text-3xl font-black text-wa-green drop-shadow-[0_0_20px_rgba(37,211,102,0.6)]">
-              {opt}
-            </p>
-          ))}
+        <p className="text-[10px] text-gray-400 font-medium tracking-wider uppercase mb-0.5">voted for</p>
+        {choiceBlock}
+      </>
+    );
+  } else if (s === "card") {
+    inner = (
+      <div className="relative inline-block">
+        <div className="absolute inset-0 bg-black/60 rounded-xl blur-lg scale-110" />
+        <div className="relative bg-gradient-to-br from-gray-900/95 to-gray-800/95 border-2 border-wa-green/60 rounded-xl px-5 py-3 shadow-[0_0_30px_rgba(37,211,102,0.3)]">
+          <p className="font-black text-white mb-0.5 drop-shadow-[0_0_8px_rgba(255,255,255,0.3)]" style={{ fontSize: circleFontSize + 2 }}>{displayName}</p>
+          <p className="text-[10px] text-gray-400 font-medium tracking-wider uppercase mb-1">voted for</p>
+          {choiceBlock}
         </div>
       </div>
+    );
+  } else if (s === "diamond") {
+    inner = (
+      <>
+        <div
+          className="mx-auto mb-2 bg-gradient-to-br from-purple-600/30 to-cyan-500/30 border-2 border-cyan-400/60 flex items-center justify-center font-bold text-cyan-300 shadow-xl shadow-cyan-500/30 animate-bounce-in p-2"
+          style={{ width: circleSize, height: circleSize, fontSize: circleFontSize, transform: "rotate(45deg)", borderRadius: "12px" }}
+        >
+          <span className="text-center leading-tight break-words max-w-[90%]" style={{ transform: "rotate(-45deg)" }}>{displayName}</span>
+        </div>
+        <p className="text-[10px] text-gray-400 font-medium tracking-wider uppercase mb-0.5">voted for</p>
+        {choiceBlock}
+      </>
+    );
+  } else if (s === "hexagon") {
+    inner = (
+      <>
+        <div className="mx-auto mb-1.5 relative flex items-center justify-center animate-bounce-in" style={{ width: circleSize + 10, height: circleSize + 10 }}>
+          <svg viewBox="0 0 100 100" className="absolute inset-0 w-full h-full">
+            <polygon points="50,2 93,25 93,75 50,98 7,75 7,25" fill="rgba(37,211,102,0.15)" stroke="rgba(37,211,102,0.6)" strokeWidth="2" />
+          </svg>
+          <span className="relative text-center leading-tight break-words text-wa-green font-bold px-3" style={{ fontSize: circleFontSize }}>{displayName}</span>
+        </div>
+        <p className="text-[10px] text-gray-400 font-medium tracking-wider uppercase mb-0.5">voted for</p>
+        {choiceBlock}
+      </>
+    );
+  } else if (s === "star") {
+    inner = (
+      <>
+        <div className="mx-auto mb-1.5 relative flex items-center justify-center animate-bounce-in" style={{ width: circleSize + 15, height: circleSize + 15 }}>
+          <svg viewBox="0 0 100 100" className="absolute inset-0 w-full h-full">
+            <polygon points="50,5 61,35 95,35 68,57 79,90 50,70 21,90 32,57 5,35 39,35" fill="rgba(255,215,0,0.15)" stroke="rgba(255,215,0,0.6)" strokeWidth="2" />
+          </svg>
+          <span className="relative text-center leading-tight break-words text-yellow-300 font-bold px-4" style={{ fontSize: circleFontSize }}>{displayName}</span>
+        </div>
+        <p className="text-[10px] text-gray-400 font-medium tracking-wider uppercase mb-0.5">voted for</p>
+        {choiceBlock}
+      </>
+    );
+  }
+
+  return (
+    <div
+      className="absolute pointer-events-none animate-vote-splash text-center"
+      style={{ left: `${splash.posX}%`, top: `${splash.posY}%`, transform: "translate(-50%, -50%)" }}
+    >
+      {inner}
+    </div>
+  );
+}
+
+function VoteSplash({ splashes }) {
+  if (!splashes || splashes.length === 0) return null;
+  return (
+    <div className="fixed inset-0 z-[10000] pointer-events-none">
+      {splashes.map((sp) => (
+        <SplashBubble key={sp.id} splash={sp} />
+      ))}
     </div>
   );
 }
@@ -949,7 +1373,7 @@ function renderTemplate(templateKey, props) {
   }
 }
 
-export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, viewerTemplate }) {
+export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, viewerTemplate, viewerEffect }) {
   const [votes, setVotes] = useState([]);
   const [totalVotes, setTotalVotes] = useState(0);
   const [uniqueVoters, setUniqueVoters] = useState(0);
@@ -957,28 +1381,38 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
   const [voteLog, setVoteLog] = useState([]);
   const [tab, setTab] = useState("results");
   const [isSharedToViewer, setIsSharedToViewer] = useState(false);
-  const [voteSplash, setVoteSplash] = useState(null);
+  const [voteSplashes, setVoteSplashes] = useState([]);
   const [template, setTemplate] = useState(() => localStorage.getItem("pollTemplate") || "classic");
+  const [effect, setEffect] = useState(() => localStorage.getItem("pollEffect") || "confetti");
   const prevTotalRef = useRef(0);
   const refreshTimerRef = useRef(null);
-  const splashTimerRef = useRef(null);
+  const splashIdRef = useRef(0);
   const activeTemplate = isViewer ? (viewerTemplate || "classic") : template;
+  const activeEffect = isViewer ? (viewerEffect || "confetti") : effect;
   const isMultiSelect = poll?.selectableCount !== 1;
 
   const showVoteToast = useCallback((voterName, voterPhone, selectedOption) => {
     if (!selectedOption) return;
-    if (splashTimerRef.current) clearTimeout(splashTimerRef.current);
-    setVoteSplash({ voterName, voterPhone, selectedOption });
-    fireConfetti();
-    splashTimerRef.current = setTimeout(() => setVoteSplash(null), 3500);
-  }, []);
+    const id = ++splashIdRef.current;
+    const shape = activeEffect === "random"
+      ? SPLASH_SHAPES[Math.floor(Math.random() * SPLASH_SHAPES.length)]
+      : "circle";
+    const posX = 15 + Math.random() * 70;
+    const posY = 15 + Math.random() * 55;
+    const newSplash = { id, voterName, voterPhone, selectedOption, shape, posX, posY };
+    setVoteSplashes((prev) => [...prev, newSplash]);
+    fireEffect(activeEffect);
+    setTimeout(() => {
+      setVoteSplashes((prev) => prev.filter((s) => s.id !== id));
+    }, 3500);
+  }, [activeEffect]);
 
   const handleShareToViewer = async () => {
     try {
       const res = await fetch(`${API_BASE}/api/viewer-poll`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pollId: poll.id, template }),
+        body: JSON.stringify({ pollId: poll.id, template, effect }),
       });
       const data = await res.json();
       if (data.success) setIsSharedToViewer(true);
@@ -1012,6 +1446,29 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
       });
     } catch (err) {
       console.error("Failed to sync template:", err);
+    }
+  };
+
+  const handleEffectChange = async (key) => {
+    setEffect(key);
+    localStorage.setItem("pollEffect", key);
+    fireEffect(key);
+    const id = ++splashIdRef.current;
+    const shape = key === "random"
+      ? SPLASH_SHAPES[Math.floor(Math.random() * SPLASH_SHAPES.length)]
+      : "circle";
+    const posX = 15 + Math.random() * 70;
+    const posY = 15 + Math.random() * 55;
+    setVoteSplashes((prev) => [...prev, { id, voterName: "Israel Cohen", voterPhone: "+972-00-0000000", selectedOption: votes[0]?.optionText || "Option", shape, posX, posY }]);
+    setTimeout(() => setVoteSplashes((prev) => prev.filter((s) => s.id !== id)), 3500);
+    try {
+      await fetch(`${API_BASE}/api/viewer-effect`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ effect: key }),
+      });
+    } catch (err) {
+      console.error("Failed to sync effect:", err);
     }
   };
 
@@ -1127,7 +1584,7 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
 
   return (
     <div className="space-y-4">
-      <VoteSplash splash={voteSplash} />
+      <VoteSplash splashes={voteSplashes} />
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
@@ -1269,6 +1726,27 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
               </button>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Effect picker (Admin only) */}
+      {tab === "results" && !isViewer && (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-[10px] uppercase tracking-widest text-cyan-400 font-bold mr-1">Effects</span>
+          {VOTE_EFFECTS.map((e) => (
+            <button
+              key={e.key}
+              onClick={() => handleEffectChange(e.key)}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1 border ${
+                activeEffect === e.key
+                  ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/40 shadow-sm shadow-cyan-500/10"
+                  : "bg-gray-800/50 text-gray-400 border-gray-700 hover:text-cyan-300 hover:border-cyan-500/40"
+              }`}
+            >
+              <span>{e.icon}</span>
+              <span>{e.label}</span>
+            </button>
+          ))}
         </div>
       )}
 

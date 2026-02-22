@@ -9,6 +9,7 @@ export default function ViewerMode({ socket, isConnected, onBack, onAdminClick }
   const [loading, setLoading] = useState(true);
   const [noPoll, setNoPoll] = useState(false);
   const [template, setTemplate] = useState("classic");
+  const [effect, setEffect] = useState("confetti");
 
   const fetchViewerPoll = useCallback(async () => {
     try {
@@ -16,6 +17,7 @@ export default function ViewerMode({ socket, isConnected, onBack, onAdminClick }
       const res = await fetch(`${API_BASE}/api/viewer-poll`);
       const data = await res.json();
       if (data.template) setTemplate(data.template);
+      if (data.effect) setEffect(data.effect);
       if (data.poll) {
         setPoll(data.poll);
         setGroup(data.group);
@@ -42,18 +44,24 @@ export default function ViewerMode({ socket, isConnected, onBack, onAdminClick }
     const handleReconnect = () => fetchViewerPoll();
     const handleChange = (data) => {
       if (data?.template) setTemplate(data.template);
+      if (data?.effect) setEffect(data.effect);
       fetchViewerPoll();
     };
     const handleTemplateChange = (data) => {
       if (data?.template) setTemplate(data.template);
     };
+    const handleEffectChange = (data) => {
+      if (data?.effect) setEffect(data.effect);
+    };
     socket.on("connect", handleReconnect);
     socket.on("viewer_poll_changed", handleChange);
     socket.on("viewer_template_changed", handleTemplateChange);
+    socket.on("viewer_effect_changed", handleEffectChange);
     return () => {
       socket.off("connect", handleReconnect);
       socket.off("viewer_poll_changed", handleChange);
       socket.off("viewer_template_changed", handleTemplateChange);
+      socket.off("viewer_effect_changed", handleEffectChange);
     };
   }, [socket, fetchViewerPoll]);
 
@@ -157,6 +165,7 @@ export default function ViewerMode({ socket, isConnected, onBack, onAdminClick }
           onBack={onBack}
           isViewer={true}
           viewerTemplate={template}
+          viewerEffect={effect}
         />
       </main>
     </div>

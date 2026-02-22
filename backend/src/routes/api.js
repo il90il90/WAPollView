@@ -260,16 +260,18 @@ module.exports = function (prisma) {
     try {
       const pollSetting = await prisma.appSettings.findUnique({ where: { key: "viewer_poll_id" } });
       const templateSetting = await prisma.appSettings.findUnique({ where: { key: "viewer_template" } });
+      const effectSetting = await prisma.appSettings.findUnique({ where: { key: "viewer_effect" } });
       return {
         pollId: pollSetting?.value || null,
         template: templateSetting?.value || "classic",
+        effect: effectSetting?.value || "confetti",
       };
     } catch {
-      return { pollId: null, template: "classic" };
+      return { pollId: null, template: "classic", effect: "confetti" };
     }
   }
 
-  async function saveViewerSettings(pollId, template) {
+  async function saveViewerSettings(pollId, template, effect) {
     try {
       if (pollId !== undefined) {
         if (pollId) {
@@ -281,6 +283,9 @@ module.exports = function (prisma) {
       if (template) {
         await prisma.appSettings.upsert({ where: { key: "viewer_template" }, update: { value: template }, create: { id: "viewer_template", key: "viewer_template", value: template } });
       }
+      if (effect) {
+        await prisma.appSettings.upsert({ where: { key: "viewer_effect" }, update: { value: effect }, create: { id: "viewer_effect", key: "viewer_effect", value: effect } });
+      }
     } catch (e) {
       console.error("[API] Failed to save viewer settings:", e.message);
     }
@@ -291,6 +296,7 @@ module.exports = function (prisma) {
       const settings = await getViewerSettings();
       let pollId = settings.pollId;
       let template = settings.template;
+      let effect = settings.effect;
 
       if (!pollId) {
         const latestPoll = await prisma.poll.findFirst({
@@ -299,9 +305,9 @@ module.exports = function (prisma) {
         });
         if (latestPoll) {
           pollId = latestPoll.id;
-          return res.json({ poll: latestPoll, group: latestPoll.group, template });
+          return res.json({ poll: latestPoll, group: latestPoll.group, template, effect });
         }
-        return res.json({ poll: null, group: null, template });
+        return res.json({ poll: null, group: null, template, effect });
       }
 
       const poll = await prisma.poll.findUnique({
@@ -309,17 +315,17 @@ module.exports = function (prisma) {
         include: { options: true, group: true },
       });
       if (!poll) {
-        await saveViewerSettings(null, undefined);
+        await saveViewerSettings(null, undefined, undefined);
         const latestPoll = await prisma.poll.findFirst({
           orderBy: { createdAt: "desc" },
           include: { options: true, group: true },
         });
         if (latestPoll) {
-          return res.json({ poll: latestPoll, group: latestPoll.group, template });
+          return res.json({ poll: latestPoll, group: latestPoll.group, template, effect });
         }
-        return res.json({ poll: null, group: null, template });
+        return res.json({ poll: null, group: null, template, effect });
       }
-      res.json({ poll, group: poll.group, template });
+      res.json({ poll, group: poll.group, template, effect });
     } catch (err) {
       console.error("[API] /viewer-poll error:", err.message);
       res.status(500).json({ error: "Failed to fetch viewer poll" });
@@ -327,26 +333,38 @@ module.exports = function (prisma) {
   });
 
   router.post("/viewer-poll", async (req, res) => {
-    const { pollId, template } = req.body;
-    await saveViewerSettings(pollId || null, template || undefined);
-    console.log(`[API] Viewer poll set to: ${pollId || null}, template: ${template || "unchanged"}`);
+    const { pollId, template, effect } = req.body;
+    await saveViewerSettings(pollId || null, template || undefined, effect || undefined);
+    console.log(`[API] Viewer poll set to: ${pollId || null}, template: ${template || "unchanged"}, effect: ${effect || "unchanged"}`);
     const io = req.app.get("io");
     if (io) {
-      io.emit("viewer_poll_changed", { pollId: pollId || null, template });
+      io.emit("viewer_poll_changed", { pollId: pollId || null, template, effect });
     }
-    res.json({ success: true, pollId: pollId || null, template });
+    res.json({ success: true, pollId: pollId || null, template, effect });
   });
 
   router.post("/viewer-template", async (req, res) => {
     const { template } = req.body;
     if (!template) return res.status(400).json({ error: "template required" });
-    await saveViewerSettings(undefined, template);
+    await saveViewerSettings(undefined, template, undefined);
     console.log(`[API] Viewer template set to: ${template}`);
     const io = req.app.get("io");
     if (io) {
       io.emit("viewer_template_changed", { template });
     }
     res.json({ success: true, template });
+  });
+
+  router.post("/viewer-effect", async (req, res) => {
+    const { effect } = req.body;
+    if (!effect) return res.status(400).json({ error: "effect required" });
+    await saveViewerSettings(undefined, undefined, effect);
+    console.log(`[API] Viewer effect set to: ${effect}`);
+    const io = req.app.get("io");
+    if (io) {
+      io.emit("viewer_effect_changed", { effect });
+    }
+    res.json({ success: true, effect });
   });
 
   router.post("/admin/delete-polls", async (req, res) => {
