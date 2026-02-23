@@ -362,38 +362,23 @@ module.exports = function (prisma) {
       if (setting.value !== hashPassword(password)) {
         return res.status(401).json({ success: false, error: "Wrong password" });
       }
-      const deletedVotes = await prisma.voteLog.deleteMany({});
-      const deletedOptions = await prisma.pollOption.deleteMany({});
-      const deletedPolls = await prisma.poll.deleteMany({});
-      console.log(`[API] Sync: Deleted ${deletedPolls.count} polls, ${deletedOptions.count} options, ${deletedVotes.count} votes`);
-      const io = req.app.get("io");
-      if (io) io.emit("polls_deleted", { timestamp: Date.now() });
 
+      const deletedVotes = await prisma.voteLog.deleteMany({});
+      console.log(`[API] Sync: Cleared ${deletedVotes.count} vote logs, reconnecting to re-sync...`);
+
+      const io = req.app.get("io");
       const { getSock } = require("../whatsapp");
       const sock = getSock();
       if (sock) {
-        console.log("[API] Sync: Clearing sync state and reconnecting...");
-        const fs = require("fs");
-        const path = require("path");
-        const authDir = path.resolve(__dirname, "..", "..", "auth_info");
-        try {
-          const files = fs.readdirSync(authDir);
-          for (const file of files) {
-            if (file.startsWith("app-state-sync") || file.startsWith("sender-key")) {
-              fs.unlinkSync(path.join(authDir, file));
-            }
-          }
-          console.log("[API] Sync: Cleared sync state files");
-        } catch (e) {
-          console.error("[API] Sync: Error clearing sync state:", e.message);
-        }
         sock.end(new Error("Resync requested"));
       }
+      if (io) io.emit("history_sync_complete", { timestamp: Date.now() });
 
-      res.json({ success: true, deleted: deletedPolls.count });
+      const pollCount = await prisma.poll.count();
+      res.json({ success: true, polls: pollCount });
     } catch (err) {
-      console.error("[API] /admin/delete-polls error:", err.message);
-      res.status(500).json({ success: false, error: "Failed to sync polls" });
+      console.error("[API] /admin/sync error:", err.message);
+      res.status(500).json({ success: false, error: "Failed to sync" });
     }
   });
 

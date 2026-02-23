@@ -442,7 +442,7 @@ export default function App() {
                 </svg>
               </div>
               <h2 className="text-lg font-bold">Sync Polls</h2>
-              <p className="text-sm text-gray-400">This will delete all existing polls and re-sync them from WhatsApp. Votes and history will be refreshed.</p>
+              <p className="text-sm text-gray-400">This will refresh vote data and reconnect to WhatsApp to pick up any new polls.</p>
             </div>
 
             <form onSubmit={handleDeletePolls} className="space-y-3">
@@ -452,7 +452,7 @@ export default function App() {
               {dpError && <p className="text-red-400 text-xs text-center">{dpError}</p>}
               <button type="submit" disabled={dpLoading || !dpPassword.trim()}
                 className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-40 transition-all">
-                {dpLoading ? "Syncing..." : "Sync All Polls"}
+                {dpLoading ? "Syncing..." : "Sync"}
               </button>
             </form>
 
