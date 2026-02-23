@@ -8,6 +8,17 @@ export default function Step2Groups({ socket, onSelectPoll, onNewPoll }) {
   const [search, setSearch] = useState("");
   const [expandedGroup, setExpandedGroup] = useState(null);
   const [filter, setFilter] = useState("all");
+  const [sharedPollId, setSharedPollId] = useState(null);
+
+  const fetchSharedPoll = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/viewer-poll`);
+      const data = await res.json();
+      setSharedPollId(data.poll?.id || null);
+    } catch {
+      setSharedPollId(null);
+    }
+  }, []);
 
   const fetchGroups = useCallback(async () => {
     try {
@@ -24,20 +35,24 @@ export default function Step2Groups({ socket, onSelectPoll, onNewPoll }) {
 
   useEffect(() => {
     fetchGroups();
-  }, [fetchGroups]);
+    fetchSharedPoll();
+  }, [fetchGroups, fetchSharedPoll]);
 
   useEffect(() => {
     if (!socket) return;
 
     const refresh = () => fetchGroups();
+    const refreshShared = () => fetchSharedPoll();
     socket.on("history_sync_complete", refresh);
     socket.on("groups_updated", refresh);
+    socket.on("viewer_poll_changed", refreshShared);
 
     return () => {
       socket.off("history_sync_complete", refresh);
       socket.off("groups_updated", refresh);
+      socket.off("viewer_poll_changed", refreshShared);
     };
-  }, [socket, fetchGroups]);
+  }, [socket, fetchGroups, fetchSharedPoll]);
 
   const filtered = groups.filter((g) => {
     const matchesSearch =
@@ -198,34 +213,49 @@ export default function Step2Groups({ socket, onSelectPoll, onNewPoll }) {
                       <span className="text-sm text-wa-green font-medium">Create New Poll</span>
                     </button>
 
-                    {group.polls.map((poll) => (
-                      <button
-                        key={poll.id}
-                        onClick={() => onSelectPoll(group, poll)}
-                        className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-gray-800 transition-colors"
-                      >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center shrink-0">
-                            <span className="text-sm">📊</span>
-                          </div>
-                          <div className="text-left min-w-0">
-                            <p className="text-sm font-medium truncate">{poll.title}</p>
-                            <p className="text-[10px] text-gray-600">
-                              {new Date(poll.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              {poll.options.length} options · {poll._count?.votes || 0} votes
-                            </p>
-                          </div>
-                        </div>
-                        <svg
-                          className="w-4 h-4 text-gray-600 shrink-0"
-                          fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                    {group.polls.map((poll) => {
+                      const isShared = poll.id === sharedPollId;
+                      return (
+                        <button
+                          key={poll.id}
+                          onClick={() => onSelectPoll(group, poll)}
+                          className={`w-full flex items-center justify-between p-3 rounded-xl transition-colors ${
+                            isShared ? "bg-red-500/10 border border-red-500/30 hover:bg-red-500/15" : "hover:bg-gray-800"
+                          }`}
                         >
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
-                      </button>
-                    ))}
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                              isShared ? "bg-red-500/20" : "bg-blue-500/20"
+                            }`}>
+                              <span className="text-sm">{isShared ? "📡" : "📊"}</span>
+                            </div>
+                            <div className="text-left min-w-0">
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-medium truncate">{poll.title}</p>
+                                {isShared && (
+                                  <span className="shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-red-500 text-white text-[9px] font-bold animate-pulse">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                                    On Air
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[10px] text-gray-600">
+                                {new Date(poll.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                {poll.options.length} options · {poll._count?.votes || 0} votes
+                              </p>
+                            </div>
+                          </div>
+                          <svg
+                            className="w-4 h-4 text-gray-600 shrink-0"
+                            fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </button>
+                      );
+                    })}
 
                     {group.polls.length === 0 && (
                       <p className="text-xs text-gray-600 text-center py-2">
