@@ -4,6 +4,8 @@ import {
   PieChart, Pie, RadialBarChart, RadialBar, Legend,
 } from "recharts";
 import confetti from "canvas-confetti";
+import { jsPDF } from "jspdf";
+import html2canvas from "html2canvas";
 
 const API_BASE = import.meta.env.VITE_BACKEND_URL || "";
 
@@ -1384,9 +1386,11 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
   const [voteSplashes, setVoteSplashes] = useState([]);
   const [template, setTemplate] = useState(() => localStorage.getItem("pollTemplate") || "classic");
   const [effect, setEffect] = useState(() => localStorage.getItem("pollEffect") || "confetti");
+  const [showPdfModal, setShowPdfModal] = useState(false);
   const prevTotalRef = useRef(0);
   const refreshTimerRef = useRef(null);
   const splashIdRef = useRef(0);
+  const chartRef = useRef(null);
   const activeTemplate = isViewer ? (viewerTemplate || "classic") : template;
   const activeEffect = isViewer ? (viewerEffect || "confetti") : effect;
   const isMultiSelect = poll?.selectableCount !== 1;
@@ -1469,6 +1473,173 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
       });
     } catch (err) {
       console.error("Failed to sync effect:", err);
+    }
+  };
+
+  const handleExportPDF = async (mode) => {
+    setShowPdfModal(false);
+    const leading = votes.reduce((best, v) => (v.count > best.count ? v : best), { count: 0, optionText: "-" });
+    const sortedVoters = [...allVoters].sort((a, b) => (a.name || a.phone || "").localeCompare(b.name || b.phone || ""));
+
+    const includeChart = mode === "full" || mode === "results";
+    const includeVoters = mode === "full" || mode === "table";
+    const includeActivity = mode === "full";
+
+    const headerHtml = `
+      <div style="border-bottom:3px solid #25D366;padding-bottom:16px;margin-bottom:20px;">
+        <h1 style="font-size:28px;color:#25D366;margin:0 0 6px 0;">${poll?.title || "Poll Report"}</h1>
+        <p style="font-size:14px;color:#999;margin:0 0 4px 0;">${group?.name || ""}</p>
+        <p style="font-size:11px;color:#666;margin:0;">
+          ${new Date().toLocaleString("he-IL")}
+          ${isMultiSelect ? `&nbsp;&nbsp;|&nbsp;&nbsp;בחירה מרובה (עד ${poll?.selectableCount === 0 ? "ללא הגבלה" : poll?.selectableCount})` : ""}
+        </p>
+      </div>
+    `;
+
+    const statsHtml = includeChart ? `
+      <div style="display:flex;gap:12px;margin-bottom:24px;">
+        <div style="flex:1;background:#1a1a1a;border-radius:10px;padding:14px;text-align:center;border:1px solid #333;">
+          <div style="font-size:28px;font-weight:bold;color:#25D366;">${uniqueVoters}</div>
+          <div style="font-size:11px;color:#888;">מצביעים</div>
+        </div>
+        ${isMultiSelect ? `<div style="flex:1;background:#1a1a1a;border-radius:10px;padding:14px;text-align:center;border:1px solid #333;">
+          <div style="font-size:28px;font-weight:bold;color:#a855f7;">${totalVotes}</div>
+          <div style="font-size:11px;color:#888;">בחירות</div>
+        </div>` : ""}
+        <div style="flex:1;background:#1a1a1a;border-radius:10px;padding:14px;text-align:center;border:1px solid #333;">
+          <div style="font-size:28px;font-weight:bold;color:#3b82f6;">${votes.length}</div>
+          <div style="font-size:11px;color:#888;">אפשרויות</div>
+        </div>
+        <div style="flex:1;background:#1a1a1a;border-radius:10px;padding:14px;text-align:center;border:1px solid #333;">
+          <div style="font-size:18px;font-weight:bold;color:#f59e0b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${leading.optionText}</div>
+          <div style="font-size:11px;color:#888;">מוביל (${leading.count})</div>
+        </div>
+      </div>
+      <div id="pdf-chart-slot" style="margin-bottom:24px;"></div>
+    ` : "";
+
+    const votersHtml = includeVoters ? `
+      <div style="margin-top:12px;margin-bottom:8px;">
+        <h2 style="font-size:16px;color:#25D366;margin:0 0 4px 0;border-bottom:1px solid #333;padding-bottom:6px;">רשימת מצביעים</h2>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead>
+          <tr style="background:#1a1a1a;">
+            <th style="padding:8px 10px;text-align:right;color:#888;border-bottom:1px solid #333;">#</th>
+            <th style="padding:8px 10px;text-align:right;color:#888;border-bottom:1px solid #333;">שם</th>
+            <th style="padding:8px 10px;text-align:right;color:#888;border-bottom:1px solid #333;">טלפון</th>
+            <th style="padding:8px 10px;text-align:right;color:#888;border-bottom:1px solid #333;">בחירה</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${sortedVoters.length > 0 ? sortedVoters.map((v, i) => `
+            <tr style="background:${i % 2 === 0 ? "#151515" : "#1a1a1a"};">
+              <td style="padding:6px 10px;border-bottom:1px solid #222;color:#666;">${i + 1}</td>
+              <td style="padding:6px 10px;border-bottom:1px solid #222;color:#eee;font-weight:500;">${v.name || "-"}</td>
+              <td style="padding:6px 10px;border-bottom:1px solid #222;color:#aaa;direction:ltr;text-align:right;">${v.phone || "-"}</td>
+              <td style="padding:6px 10px;border-bottom:1px solid #222;color:#25D366;font-weight:500;">${v.options ? v.options.map(o => o.text).join(", ") : v.option || "-"}</td>
+            </tr>
+          `).join("") : `<tr><td colspan="4" style="padding:12px;text-align:center;color:#666;">אין מצביעים עדיין</td></tr>`}
+        </tbody>
+      </table>
+    ` : "";
+
+    const activityHtml = includeActivity ? `
+      <div style="margin-top:28px;margin-bottom:8px;">
+        <h2 style="font-size:16px;color:#999;margin:0 0 4px 0;border-bottom:1px solid #333;padding-bottom:6px;">לוג פעילות (שינויי הצבעה)</h2>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:11px;">
+        <thead>
+          <tr style="background:#1a1a1a;">
+            <th style="padding:6px 8px;text-align:right;color:#888;border-bottom:1px solid #333;">#</th>
+            <th style="padding:6px 8px;text-align:right;color:#888;border-bottom:1px solid #333;">מצביע</th>
+            <th style="padding:6px 8px;text-align:right;color:#888;border-bottom:1px solid #333;">פעולה</th>
+            <th style="padding:6px 8px;text-align:right;color:#888;border-bottom:1px solid #333;">תאריך</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${voteLog.length > 0 ? voteLog.map((log, i) => `
+            <tr style="background:${i % 2 === 0 ? "#151515" : "#1a1a1a"};">
+              <td style="padding:5px 8px;border-bottom:1px solid #222;color:#666;">${i + 1}</td>
+              <td style="padding:5px 8px;border-bottom:1px solid #222;color:#eee;">${log.voterName || formatPhone(log.voterJid)}</td>
+              <td style="padding:5px 8px;border-bottom:1px solid #222;color:${log.selectedOptionText ? "#25D366" : "#ef4444"};">${log.selectedOptionText ? log.selectedOptionText.split("|").join(", ") : "ביטול הצבעה"}</td>
+              <td style="padding:5px 8px;border-bottom:1px solid #222;color:#888;direction:ltr;text-align:right;">${new Date(log.timestamp).toLocaleString("he-IL")}</td>
+            </tr>
+          `).join("") : `<tr><td colspan="4" style="padding:12px;text-align:center;color:#666;">אין פעילות עדיין</td></tr>`}
+        </tbody>
+      </table>
+    ` : "";
+
+    const container = document.createElement("div");
+    container.style.cssText = "position:fixed;left:-9999px;top:0;width:800px;background:#111;color:#eee;font-family:system-ui,-apple-system,sans-serif;padding:40px;direction:rtl;";
+    container.innerHTML = `
+      ${headerHtml}
+      ${statsHtml}
+      ${votersHtml}
+      ${activityHtml}
+      <div style="margin-top:24px;text-align:center;color:#555;font-size:10px;border-top:1px solid #333;padding-top:10px;">
+        Generated by WAPollView &bull; ${new Date().toLocaleString("he-IL")}
+      </div>
+    `;
+
+    document.body.appendChild(container);
+
+    if (includeChart && chartRef.current) {
+      try {
+        const chartCanvas = await html2canvas(chartRef.current, { backgroundColor: "#111", scale: 2, useCORS: true, logging: false });
+        const chartImg = document.createElement("img");
+        chartImg.src = chartCanvas.toDataURL("image/png");
+        chartImg.style.cssText = "width:100%;border-radius:8px;";
+        const slot = container.querySelector("#pdf-chart-slot");
+        if (slot) slot.appendChild(chartImg);
+      } catch (e) {
+        console.error("Chart capture failed:", e);
+      }
+    }
+
+    await new Promise((r) => setTimeout(r, 300));
+
+    try {
+      const canvas = await html2canvas(container, { backgroundColor: "#111", scale: 2, useCORS: true, logging: false });
+
+      const doc = new jsPDF("p", "mm", "a4");
+      const pageW = doc.internal.pageSize.getWidth();
+      const pageH = doc.internal.pageSize.getHeight();
+      const margin = 8;
+      const contentW = pageW - margin * 2;
+
+      const imgRatio = canvas.width / canvas.height;
+      const fullImgH = contentW / imgRatio;
+      const usableH = pageH - margin * 2;
+
+      let srcY = 0;
+      const totalSrcH = canvas.height;
+      const srcPageH = (usableH / fullImgH) * totalSrcH;
+      let pageNum = 0;
+
+      while (srcY < totalSrcH) {
+        if (pageNum > 0) doc.addPage();
+        const sliceH = Math.min(srcPageH, totalSrcH - srcY);
+        const sliceCanvas = document.createElement("canvas");
+        sliceCanvas.width = canvas.width;
+        sliceCanvas.height = sliceH;
+        const ctx = sliceCanvas.getContext("2d");
+        ctx.drawImage(canvas, 0, srcY, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+        const sliceData = sliceCanvas.toDataURL("image/png");
+        const sliceImgH = (sliceH / totalSrcH) * fullImgH;
+        doc.addImage(sliceData, "PNG", margin, margin, contentW, sliceImgH);
+        srcY += sliceH;
+        pageNum++;
+      }
+
+      const modeLabel = mode === "full" ? "full" : mode === "results" ? "results" : "voters";
+      const safeName = (poll?.title || "poll").replace(/[^a-zA-Z0-9\u0590-\u05FF ]/g, "").trim().replace(/\s+/g, "_");
+      const dateStr = new Date().toISOString().slice(0, 10);
+      doc.save(`${safeName}_${modeLabel}_${dateStr}.pdf`);
+    } catch (e) {
+      console.error("PDF generation failed:", e);
+    } finally {
+      document.body.removeChild(container);
     }
   };
 
@@ -1608,6 +1779,18 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
           </button>
+          {!isViewer && (
+            <button
+              onClick={() => setShowPdfModal(true)}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-amber-600 text-white hover:bg-amber-500 transition-all shadow-sm"
+              title="Export poll report as PDF"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 10v6m0 0l-3-3m3 3l3-3M3 17v3a2 2 0 002 2h14a2 2 0 002-2v-3" />
+              </svg>
+              PDF
+            </button>
+          )}
           {!isViewer && (
             <button
               onClick={isSharedToViewer ? handleUnshareFromViewer : handleShareToViewer}
@@ -1751,7 +1934,11 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
       )}
 
       {/* Results tab */}
-      {tab === "results" && renderTemplate(activeTemplate, { votes, chartData, totalVotes, COLORS, allVoters, uniqueVoters, isMultiSelect, pctBase: isMultiSelect ? (uniqueVoters || 1) : (totalVotes || 1) })}
+      {tab === "results" && (
+        <div ref={chartRef}>
+          {renderTemplate(activeTemplate, { votes, chartData, totalVotes, COLORS, allVoters, uniqueVoters, isMultiSelect, pctBase: isMultiSelect ? (uniqueVoters || 1) : (totalVotes || 1) })}
+        </div>
+      )}
 
       {/* Voters tab */}
       {tab === "voters" && (
@@ -1862,6 +2049,55 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
         <p className="text-center text-[10px] text-gray-600">
           Last update: {lastUpdate.toLocaleTimeString()}
         </p>
+      )}
+
+      {showPdfModal && (
+        <div className="fixed inset-0 z-[10001] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={() => setShowPdfModal(false)}>
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()} dir="rtl">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-lg font-bold text-white">ייצוא PDF</h3>
+              <button onClick={() => setShowPdfModal(false)} className="text-gray-400 hover:text-white transition-colors text-xl leading-none">&times;</button>
+            </div>
+            <div className="space-y-3">
+              <button
+                onClick={() => handleExportPDF("full")}
+                className="w-full flex items-center gap-4 p-4 rounded-xl bg-gray-800 hover:bg-gray-750 border border-gray-700 hover:border-wa-green/50 transition-all group text-right"
+              >
+                <div className="w-11 h-11 rounded-lg bg-wa-green/15 flex items-center justify-center text-xl shrink-0 group-hover:bg-wa-green/25 transition-colors">
+                  📋
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-white group-hover:text-wa-green transition-colors">דוח מלא</p>
+                  <p className="text-xs text-gray-400 mt-0.5">גרף, טבלת מצביעים ולוג פעילות</p>
+                </div>
+              </button>
+              <button
+                onClick={() => handleExportPDF("results")}
+                className="w-full flex items-center gap-4 p-4 rounded-xl bg-gray-800 hover:bg-gray-750 border border-gray-700 hover:border-blue-500/50 transition-all group text-right"
+              >
+                <div className="w-11 h-11 rounded-lg bg-blue-500/15 flex items-center justify-center text-xl shrink-0 group-hover:bg-blue-500/25 transition-colors">
+                  📊
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-white group-hover:text-blue-400 transition-colors">תוצאות הסקר</p>
+                  <p className="text-xs text-gray-400 mt-0.5">סיכום וגרף בלבד</p>
+                </div>
+              </button>
+              <button
+                onClick={() => handleExportPDF("table")}
+                className="w-full flex items-center gap-4 p-4 rounded-xl bg-gray-800 hover:bg-gray-750 border border-gray-700 hover:border-amber-500/50 transition-all group text-right"
+              >
+                <div className="w-11 h-11 rounded-lg bg-amber-500/15 flex items-center justify-center text-xl shrink-0 group-hover:bg-amber-500/25 transition-colors">
+                  👥
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-white group-hover:text-amber-400 transition-colors">טבלת מצביעים</p>
+                  <p className="text-xs text-gray-400 mt-0.5">רשימת שמות, טלפונים ובחירות</p>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
