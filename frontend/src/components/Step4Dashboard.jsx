@@ -1391,6 +1391,8 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
   const [diceWinner, setDiceWinner] = useState(null);
   const [diceCurrentOption, setDiceCurrentOption] = useState(null);
   const [showWinnerOverlay, setShowWinnerOverlay] = useState(false);
+  const [isPollLocked, setIsPollLocked] = useState(poll?.isLocked || false);
+  const [declaredWinner, setDeclaredWinner] = useState(poll?.winnerOption || null);
   const diceIntervalRef = useRef(null);
   const diceTimeoutRef = useRef(null);
   const winnerOverlayTimerRef = useRef(null);
@@ -1481,6 +1483,48 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
       });
     } catch (err) {
       console.error("Failed to sync effect:", err);
+    }
+  };
+
+  const handleDeclareWinner = async () => {
+    const best = votes.reduce((b, v) => (v.count > b.count ? v : b), { count: 0, optionText: "-" });
+    const winnerName = diceWinner || best.optionText;
+    if (!winnerName || winnerName === "-") return;
+    setDiceWinner(winnerName);
+    setDeclaredWinner(winnerName);
+    setIsPollLocked(true);
+    setShowWinnerOverlay(true);
+    fireEffect("fireworks");
+    setTimeout(() => fireEffect("confetti"), 600);
+    if (winnerFireworksRef.current) clearInterval(winnerFireworksRef.current);
+    winnerFireworksRef.current = setInterval(() => fireEffect("fireworks"), 3000);
+    try {
+      await fetch(`${API_BASE}/api/polls/${poll.id}/declare-winner`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ winner: winnerName }),
+      });
+    } catch (err) {
+      console.error("Failed to declare winner:", err);
+    }
+  };
+
+  const handleReopenPoll = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/polls/${poll.id}/reopen`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await res.json();
+      if (data.success) {
+        setIsPollLocked(false);
+        setDeclaredWinner(null);
+        setDiceWinner(null);
+        setShowWinnerOverlay(false);
+        if (winnerFireworksRef.current) clearInterval(winnerFireworksRef.current);
+      }
+    } catch (err) {
+      console.error("Failed to reopen poll:", err);
     }
   };
 
@@ -1659,6 +1703,25 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
       .catch(() => {});
   }, [poll?.id, isViewer]);
 
+  useEffect(() => {
+    if (!poll?.id) return;
+    fetch(`${API_BASE}/api/polls/${poll.id}`)
+      .then((r) => r.json())
+      .then((data) => {
+        setIsPollLocked(data.isLocked || false);
+        setDeclaredWinner(data.winnerOption || null);
+        if (data.isLocked && data.winnerOption) {
+          setDiceWinner(data.winnerOption);
+          setShowWinnerOverlay(true);
+          fireEffect("fireworks");
+          setTimeout(() => fireEffect("confetti"), 600);
+          if (winnerFireworksRef.current) clearInterval(winnerFireworksRef.current);
+          winnerFireworksRef.current = setInterval(() => fireEffect("fireworks"), 3000);
+        }
+      })
+      .catch(() => {});
+  }, [poll?.id]);
+
   const fetchData = useCallback(async () => {
     if (!poll?.id) return;
     try {
@@ -1712,19 +1775,61 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
       if (data.pollId === poll.id) fetchData();
     };
     const handleHistorySync = () => fetchData();
+    const handlePollLocked = (data) => {
+      if (data.pollId === poll.id) {
+        setIsPollLocked(true);
+        setDeclaredWinner(data.winner);
+        setDiceWinner(data.winner);
+        setShowWinnerOverlay(true);
+        fireEffect("fireworks");
+        setTimeout(() => fireEffect("confetti"), 600);
+        if (winnerFireworksRef.current) clearInterval(winnerFireworksRef.current);
+        winnerFireworksRef.current = setInterval(() => fireEffect("fireworks"), 3000);
+      }
+    };
+    const handlePollReopened = (data) => {
+      if (data.pollId === poll.id) {
+        setIsPollLocked(false);
+        setDeclaredWinner(null);
+        setDiceWinner(null);
+        setShowWinnerOverlay(false);
+        if (winnerFireworksRef.current) clearInterval(winnerFireworksRef.current);
+      }
+    };
     socket.on("connect", handleReconnect);
     socket.on("poll_vote_received", handleVote);
     socket.on("poll_data_changed", handleChanged);
     socket.on("history_sync_complete", handleHistorySync);
+    socket.on("poll_locked", handlePollLocked);
+    socket.on("poll_reopened", handlePollReopened);
 
     return () => {
       socket.off("connect", handleReconnect);
       socket.off("poll_vote_received", handleVote);
       socket.off("poll_data_changed", handleChanged);
       socket.off("history_sync_complete", handleHistorySync);
+      socket.off("poll_locked", handlePollLocked);
+      socket.off("poll_reopened", handlePollReopened);
       socket.emit("unsubscribe_from_poll", { pollId: poll.id });
     };
   }, [socket, poll?.id, fetchData, showVoteToast]);
+
+  useEffect(() => {
+    if (!socket) return;
+    const handleAnnounce = (data) => {
+      if (!data?.winner) return;
+      setDiceWinner(data.winner);
+      setDeclaredWinner(data.winner);
+      setIsPollLocked(true);
+      setShowWinnerOverlay(true);
+      fireEffect("fireworks");
+      setTimeout(() => fireEffect("confetti"), 600);
+      if (winnerFireworksRef.current) clearInterval(winnerFireworksRef.current);
+      winnerFireworksRef.current = setInterval(() => fireEffect("fireworks"), 3000);
+    };
+    socket.on("viewer_announce_winner", handleAnnounce);
+    return () => socket.off("viewer_announce_winner", handleAnnounce);
+  }, [socket]);
 
   const chartData = votes.map((v) => ({
     name: v.optionText.length > 12 ? v.optionText.substring(0, 12) + "..." : v.optionText,
@@ -1759,15 +1864,17 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
       winnerFireworksRef.current = setInterval(() => {
         fireEffect("fireworks");
       }, 1500);
-      winnerOverlayTimerRef.current = setTimeout(() => {
-        setShowWinnerOverlay(false);
-        if (winnerFireworksRef.current) clearInterval(winnerFireworksRef.current);
-      }, 6000);
+      if (!isPollLocked) {
+        winnerOverlayTimerRef.current = setTimeout(() => {
+          setShowWinnerOverlay(false);
+          if (winnerFireworksRef.current) clearInterval(winnerFireworksRef.current);
+        }, 6000);
+      }
     }, 5000);
   };
 
   useEffect(() => {
-    if (!isTie) {
+    if (!isTie && !isPollLocked) {
       setDiceWinner(null);
       setDiceCurrentOption(null);
       setDiceRolling(false);
@@ -1777,7 +1884,18 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
       if (winnerOverlayTimerRef.current) clearTimeout(winnerOverlayTimerRef.current);
       if (winnerFireworksRef.current) clearInterval(winnerFireworksRef.current);
     }
-  }, [isTie, votes]);
+  }, [isTie, votes, isPollLocked]);
+
+  useEffect(() => {
+    if (isViewer && isPollLocked && declaredWinner) {
+      if (winnerFireworksRef.current) clearInterval(winnerFireworksRef.current);
+      fireEffect("fireworks");
+      winnerFireworksRef.current = setInterval(() => fireEffect("fireworks"), 3000);
+    }
+    if (!isPollLocked) {
+      if (winnerFireworksRef.current) clearInterval(winnerFireworksRef.current);
+    }
+  }, [isViewer, isPollLocked, declaredWinner]);
 
   useEffect(() => {
     return () => {
@@ -1876,8 +1994,50 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
               )}
             </button>
           )}
+          {!isViewer && !isPollLocked && (
+            <button
+              onClick={handleDeclareWinner}
+              disabled={leading.count === 0}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-amber-500 text-white shadow-lg shadow-amber-500/30 hover:bg-amber-400 hover:shadow-amber-400/50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-amber-500"
+              title="Declare winner and lock the poll"
+            >
+              <span className="text-sm">🏆</span>
+              Declare Winner
+            </button>
+          )}
+          {!isViewer && isPollLocked && (
+            <button
+              onClick={handleReopenPoll}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-emerald-600 text-white shadow-lg shadow-emerald-600/30 hover:bg-emerald-500 hover:shadow-emerald-500/50"
+              title="Reopen poll to accept new votes"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+              </svg>
+              Reopen Poll
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Lock status banner */}
+      {isPollLocked && (
+        <div className="flex items-center gap-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30">
+          <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center shrink-0">
+            <svg className="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold text-amber-400">Poll Locked — Final Results</p>
+            <p className="text-xs text-gray-400 truncate">
+              Winner: <span className="text-white font-semibold">{declaredWinner}</span>
+              {!isViewer && <span className="ml-2 text-gray-500">• New votes are blocked</span>}
+            </p>
+          </div>
+          <span className="text-2xl">🏆</span>
+        </div>
+      )}
 
       {/* Stats */}
       <div className={`grid gap-2 ${isMultiSelect ? "grid-cols-2" : "grid-cols-1"}`}>
@@ -2184,26 +2344,60 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
       )}
 
       {/* Winner celebration overlay */}
-      {showWinnerOverlay && diceWinner && (
+      {((isViewer && isPollLocked && declaredWinner) || (showWinnerOverlay && (diceWinner || declaredWinner))) && (
         <div
-          className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/80 backdrop-blur-sm"
-          onClick={() => {
+          className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/90 backdrop-blur-md"
+          onClick={isPollLocked ? undefined : () => {
             setShowWinnerOverlay(false);
             if (winnerFireworksRef.current) clearInterval(winnerFireworksRef.current);
           }}
           style={{ animation: "winnerFadeIn 0.5s ease-out" }}
         >
-          <div className="flex flex-col items-center gap-4 px-6" style={{ animation: "winnerScaleIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)" }}>
-            <div className="text-7xl sm:text-8xl" style={{ animation: "winnerTrophyBounce 1s ease-in-out infinite" }}>🏆</div>
+          <div className="flex flex-col items-center gap-6 px-6" style={{ animation: "winnerScaleIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)" }}>
+            <div className="text-8xl sm:text-9xl" style={{ animation: "winnerTrophyBounce 1s ease-in-out infinite" }}>🏆</div>
             <div className="text-center">
-              <p className="text-lg sm:text-xl text-amber-400 font-bold tracking-widest uppercase mb-2" style={{ animation: "winnerFadeIn 0.8s ease-out 0.3s both" }}>Winner</p>
-              <p className="text-3xl sm:text-5xl font-black text-white drop-shadow-[0_0_30px_rgba(37,211,102,0.6)]" style={{ animation: "winnerFadeIn 0.8s ease-out 0.5s both" }}>{diceWinner}</p>
+              <p className="text-xl sm:text-2xl text-amber-400 font-bold tracking-widest uppercase mb-3" style={{ animation: "winnerFadeIn 0.8s ease-out 0.3s both" }}>Winner</p>
+              <p className="text-4xl sm:text-6xl font-black text-white drop-shadow-[0_0_40px_rgba(37,211,102,0.6)]" style={{ animation: "winnerFadeIn 0.8s ease-out 0.5s both" }}>{diceWinner || declaredWinner}</p>
+              {isPollLocked && (
+                <p className="text-sm text-gray-400 mt-4 tracking-wide" style={{ animation: "winnerFadeIn 0.8s ease-out 0.9s both" }}>
+                  {poll?.title}
+                </p>
+              )}
             </div>
-            <div className="flex gap-2 mt-2" style={{ animation: "winnerFadeIn 0.8s ease-out 0.7s both" }}>
+            <div className="flex gap-3 mt-2" style={{ animation: "winnerFadeIn 0.8s ease-out 0.7s both" }}>
               {["🎉", "⭐", "🎊", "✨", "🎆"].map((e, i) => (
-                <span key={i} className="text-2xl sm:text-3xl" style={{ animation: `winnerStarFloat 1.5s ease-in-out ${i * 0.2}s infinite alternate` }}>{e}</span>
+                <span key={i} className="text-3xl sm:text-4xl" style={{ animation: `winnerStarFloat 1.5s ease-in-out ${i * 0.2}s infinite alternate` }}>{e}</span>
               ))}
             </div>
+            {!isViewer && isPollLocked && (
+              <div className="flex items-center gap-3 mt-6" style={{ animation: "winnerFadeIn 0.8s ease-out 1.1s both" }}>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowWinnerOverlay(false);
+                    if (winnerFireworksRef.current) clearInterval(winnerFireworksRef.current);
+                  }}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all bg-white/10 text-white/80 border border-white/20 hover:bg-white/20 hover:text-white backdrop-blur-sm"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L6.59 6.59m7.532 7.532l3.29 3.29M3 3l18 18" />
+                  </svg>
+                  Hide
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleReopenPoll();
+                  }}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30 hover:text-emerald-200 backdrop-blur-sm"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                  </svg>
+                  Reopen Poll
+                </button>
+              </div>
+            )}
           </div>
           <style>{`
             @keyframes winnerFadeIn {

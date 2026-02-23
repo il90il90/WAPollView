@@ -302,6 +302,7 @@ async function handleMessagesUpdate(updates, prisma, io) {
       }
 
       if (!dbPoll) { console.log("[Vote] Poll not found for id:", pollKey.id); continue; }
+      if (dbPoll.isLocked) { console.log("[Vote] Poll is locked, ignoring vote for:", dbPoll.title); continue; }
 
       console.log("[Vote] Found poll:", dbPoll.title);
 
@@ -624,6 +625,7 @@ async function processVoteFromUpsert(msg, prisma, io) {
   }
 
   if (!dbPoll) { console.log("[processVote] Poll NOT found for id:", pollCreationKey.id); return; }
+  if (dbPoll.isLocked) { console.log("[processVote] Poll is locked, ignoring vote for:", dbPoll.title); return; }
   if (!dbPoll.messageContent) { console.log("[processVote] No messageContent"); return; }
 
   const fullMessage = proto.Message.decode(Buffer.from(dbPoll.messageContent, "base64"));

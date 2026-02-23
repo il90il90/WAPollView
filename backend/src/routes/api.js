@@ -352,6 +352,56 @@ module.exports = function (prisma) {
     res.json({ success: true, effect });
   });
 
+  router.post("/viewer-announce-winner", (req, res) => {
+    const { winner } = req.body;
+    if (!winner) return res.status(400).json({ error: "winner required" });
+    console.log(`[API] Announce winner: ${winner}`);
+    const io = req.app.get("io");
+    if (io) {
+      io.emit("viewer_announce_winner", { winner });
+    }
+    res.json({ success: true, winner });
+  });
+
+  router.post("/polls/:pollId/declare-winner", async (req, res) => {
+    const { winner } = req.body;
+    if (!winner) return res.status(400).json({ error: "winner required" });
+    try {
+      const poll = await prisma.poll.update({
+        where: { id: req.params.pollId },
+        data: { isLocked: true, winnerOption: winner },
+      });
+      console.log(`[API] Poll "${poll.title}" locked with winner: ${winner}`);
+      const io = req.app.get("io");
+      if (io) {
+        io.emit("viewer_announce_winner", { winner });
+        io.emit("poll_locked", { pollId: poll.id, winner, isLocked: true });
+      }
+      res.json({ success: true, pollId: poll.id, winner, isLocked: true });
+    } catch (err) {
+      console.error("[API] /polls/:pollId/declare-winner error:", err.message);
+      res.status(500).json({ error: "Failed to declare winner" });
+    }
+  });
+
+  router.post("/polls/:pollId/reopen", async (req, res) => {
+    try {
+      const poll = await prisma.poll.update({
+        where: { id: req.params.pollId },
+        data: { isLocked: false, winnerOption: null },
+      });
+      console.log(`[API] Poll "${poll.title}" reopened`);
+      const io = req.app.get("io");
+      if (io) {
+        io.emit("poll_reopened", { pollId: poll.id, isLocked: false });
+      }
+      res.json({ success: true, pollId: poll.id, isLocked: false });
+    } catch (err) {
+      console.error("[API] /polls/:pollId/reopen error:", err.message);
+      res.status(500).json({ error: "Failed to reopen poll" });
+    }
+  });
+
   router.post("/admin/delete-polls", async (req, res) => {
     const { password } = req.body;
     try {
