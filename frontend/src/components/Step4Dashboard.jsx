@@ -32,6 +32,8 @@ function voterDisplay(voter) {
   };
 }
 
+const DICE_FACES = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
+
 const VOTE_EFFECTS = [
   { key: "none", label: "None", icon: "🔇" },
   { key: "confetti", label: "Confetti", icon: "🎊" },
@@ -1390,11 +1392,15 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
   const [diceRolling, setDiceRolling] = useState(false);
   const [diceWinner, setDiceWinner] = useState(null);
   const [diceCurrentOption, setDiceCurrentOption] = useState(null);
+  const [diceCountdown, setDiceCountdown] = useState(null);
+  const [diceFace, setDiceFace] = useState(0);
   const [showWinnerOverlay, setShowWinnerOverlay] = useState(false);
   const [isPollLocked, setIsPollLocked] = useState(poll?.isLocked || false);
   const [declaredWinner, setDeclaredWinner] = useState(poll?.winnerOption || null);
   const diceIntervalRef = useRef(null);
   const diceTimeoutRef = useRef(null);
+  const diceCountdownRef = useRef(null);
+  const diceFaceRef = useRef(null);
   const winnerOverlayTimerRef = useRef(null);
   const winnerFireworksRef = useRef(null);
   const prevTotalRef = useRef(0);
@@ -1486,10 +1492,10 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
     }
   };
 
-  const handleDeclareWinner = async () => {
-    const best = votes.reduce((b, v) => (v.count > b.count ? v : b), { count: 0, optionText: "-" });
-    const winnerName = diceWinner || best.optionText;
-    if (!winnerName || winnerName === "-") return;
+  const finalizeDeclareWinner = async (winnerName) => {
+    setDiceRolling(false);
+    setDiceCountdown(null);
+    setDiceCurrentOption(null);
     setDiceWinner(winnerName);
     setDeclaredWinner(winnerName);
     setIsPollLocked(true);
@@ -1507,6 +1513,82 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
     } catch (err) {
       console.error("Failed to declare winner:", err);
     }
+  };
+
+  const startDiceRoll = (tiedOptionTexts, prePickedWinner, viewerOnly) => {
+    setDiceRolling(true);
+    setDiceWinner(null);
+    setDiceCountdown(10);
+
+    let optIdx = 0;
+    diceIntervalRef.current = setInterval(() => {
+      optIdx = (optIdx + 1) % tiedOptionTexts.length;
+      setDiceCurrentOption(tiedOptionTexts[optIdx]);
+    }, 120);
+
+    let faceIdx = 0;
+    diceFaceRef.current = setInterval(() => {
+      faceIdx = (faceIdx + 1) % DICE_FACES.length;
+      setDiceFace(faceIdx);
+    }, 200);
+
+    let remaining = 10;
+    diceCountdownRef.current = setInterval(() => {
+      remaining--;
+      setDiceCountdown(remaining);
+      if (remaining <= 0) {
+        clearInterval(diceCountdownRef.current);
+        clearInterval(diceIntervalRef.current);
+        clearInterval(diceFaceRef.current);
+        setDiceCurrentOption(prePickedWinner);
+        if (viewerOnly) {
+          setTimeout(() => {
+            setDiceRolling(false);
+            setDiceCountdown(null);
+            setDiceCurrentOption(null);
+            setDiceWinner(prePickedWinner);
+            setDeclaredWinner(prePickedWinner);
+            setIsPollLocked(true);
+            setShowWinnerOverlay(true);
+            fireEffect("fireworks");
+            setTimeout(() => fireEffect("confetti"), 600);
+            if (winnerFireworksRef.current) clearInterval(winnerFireworksRef.current);
+            winnerFireworksRef.current = setInterval(() => fireEffect("fireworks"), 3000);
+          }, 800);
+        } else {
+          setTimeout(() => finalizeDeclareWinner(prePickedWinner), 800);
+        }
+      }
+    }, 1000);
+  };
+
+  const handleDeclareWinner = async () => {
+    if (diceRolling) return;
+    const best = votes.reduce((b, v) => (v.count > b.count ? v : b), { count: 0, optionText: "-" });
+    if (best.count === 0) return;
+
+    const maxCount = best.count;
+    const tied = votes.filter((v) => v.count === maxCount);
+
+    if (tied.length <= 1) {
+      finalizeDeclareWinner(best.optionText);
+      return;
+    }
+
+    const winner = tied[Math.floor(Math.random() * tied.length)];
+    const tiedTexts = tied.map((t) => t.optionText);
+
+    try {
+      await fetch(`${API_BASE}/api/viewer-dice-roll`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ options: tiedTexts, winner: winner.optionText, pollId: poll.id }),
+      });
+    } catch (err) {
+      console.error("Failed to broadcast dice roll:", err);
+    }
+
+    startDiceRoll(tiedTexts, winner.optionText, false);
   };
 
   const handleReopenPoll = async () => {
@@ -1818,6 +1900,7 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
     if (!socket) return;
     const handleAnnounce = (data) => {
       if (!data?.winner) return;
+      if (diceRolling) return;
       setDiceWinner(data.winner);
       setDeclaredWinner(data.winner);
       setIsPollLocked(true);
@@ -1827,9 +1910,19 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
       if (winnerFireworksRef.current) clearInterval(winnerFireworksRef.current);
       winnerFireworksRef.current = setInterval(() => fireEffect("fireworks"), 3000);
     };
+    const handleDiceRoll = (data) => {
+      if (!data?.options || !data?.winner) return;
+      if (diceRolling) return;
+      if (!isViewer) return;
+      startDiceRoll(data.options, data.winner, true);
+    };
     socket.on("viewer_announce_winner", handleAnnounce);
-    return () => socket.off("viewer_announce_winner", handleAnnounce);
-  }, [socket]);
+    socket.on("viewer_dice_roll", handleDiceRoll);
+    return () => {
+      socket.off("viewer_announce_winner", handleAnnounce);
+      socket.off("viewer_dice_roll", handleDiceRoll);
+    };
+  }, [socket, diceRolling]);
 
   const chartData = votes.map((v) => ({
     name: v.optionText.length > 12 ? v.optionText.substring(0, 12) + "..." : v.optionText,
@@ -1843,44 +1936,18 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
   const tiedOptions = maxCount > 0 ? votes.filter((v) => v.count === maxCount) : [];
   const isTie = tiedOptions.length > 1;
 
-  const handleDiceClick = () => {
-    if (diceRolling || !isTie) return;
-    setDiceRolling(true);
-    setDiceWinner(null);
-    let idx = 0;
-    diceIntervalRef.current = setInterval(() => {
-      idx = (idx + 1) % tiedOptions.length;
-      setDiceCurrentOption(tiedOptions[idx].optionText);
-    }, 120);
-    diceTimeoutRef.current = setTimeout(() => {
-      clearInterval(diceIntervalRef.current);
-      const winner = tiedOptions[Math.floor(Math.random() * tiedOptions.length)];
-      setDiceCurrentOption(null);
-      setDiceWinner(winner.optionText);
-      setDiceRolling(false);
-      setShowWinnerOverlay(true);
-      fireEffect("fireworks");
-      setTimeout(() => fireEffect("confetti"), 600);
-      winnerFireworksRef.current = setInterval(() => {
-        fireEffect("fireworks");
-      }, 1500);
-      if (!isPollLocked) {
-        winnerOverlayTimerRef.current = setTimeout(() => {
-          setShowWinnerOverlay(false);
-          if (winnerFireworksRef.current) clearInterval(winnerFireworksRef.current);
-        }, 6000);
-      }
-    }, 5000);
-  };
 
   useEffect(() => {
     if (!isTie && !isPollLocked) {
       setDiceWinner(null);
       setDiceCurrentOption(null);
+      setDiceCountdown(null);
       setDiceRolling(false);
       setShowWinnerOverlay(false);
       if (diceIntervalRef.current) clearInterval(diceIntervalRef.current);
       if (diceTimeoutRef.current) clearTimeout(diceTimeoutRef.current);
+      if (diceCountdownRef.current) clearInterval(diceCountdownRef.current);
+      if (diceFaceRef.current) clearInterval(diceFaceRef.current);
       if (winnerOverlayTimerRef.current) clearTimeout(winnerOverlayTimerRef.current);
       if (winnerFireworksRef.current) clearInterval(winnerFireworksRef.current);
     }
@@ -1901,6 +1968,8 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
     return () => {
       if (diceIntervalRef.current) clearInterval(diceIntervalRef.current);
       if (diceTimeoutRef.current) clearTimeout(diceTimeoutRef.current);
+      if (diceCountdownRef.current) clearInterval(diceCountdownRef.current);
+      if (diceFaceRef.current) clearInterval(diceFaceRef.current);
       if (winnerOverlayTimerRef.current) clearTimeout(winnerOverlayTimerRef.current);
       if (winnerFireworksRef.current) clearInterval(winnerFireworksRef.current);
     };
@@ -1997,11 +2066,11 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
           {!isViewer && !isPollLocked && (
             <button
               onClick={handleDeclareWinner}
-              disabled={leading.count === 0}
+              disabled={leading.count === 0 || diceRolling}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-amber-500 text-white shadow-lg shadow-amber-500/30 hover:bg-amber-400 hover:shadow-amber-400/50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-amber-500"
-              title="Declare winner and lock the poll"
+              title={isTie ? "Roll dice to pick a winner" : "Declare winner and lock the poll"}
             >
-              <span className="text-sm">🏆</span>
+              <span className="text-sm">{isTie ? "🎲" : "🏆"}</span>
               Declare Winner
             </button>
           )}
@@ -2048,32 +2117,19 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
           </div>
         )}
         <div className="card p-3 text-center">
-          {isTie ? (
-            diceWinner ? (
-              <div className="animate-bounce-in">
-                <p className="text-sm font-bold text-wa-green truncate">🏆 {diceWinner}</p>
-                <p className="text-[10px] text-gray-500">Winner!</p>
-              </div>
-            ) : diceRolling ? (
-              <div className="flex flex-col items-center gap-1">
-                <div className="text-2xl animate-spin" style={{ animationDuration: "0.6s" }}>🎲</div>
-                <p className="text-xs font-bold text-cyan-400 truncate animate-pulse">{diceCurrentOption || "..."}</p>
-              </div>
-            ) : (
-              <button onClick={handleDiceClick} className="w-full group flex flex-col items-center gap-1 focus:outline-none">
-                <div className="relative">
-                  <div className="text-3xl transition-transform duration-300 group-hover:scale-125 group-hover:rotate-12 group-active:scale-95 drop-shadow-[0_0_12px_rgba(59,130,246,0.5)]">
-                    🎲
-                  </div>
-                  <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-red-500 animate-pulse shadow-lg shadow-red-500/50" />
-                </div>
-                <p className="text-[10px] text-amber-400 font-bold">Tie! ({tiedOptions.length}) — Click to roll</p>
-              </button>
-            )
+          {diceWinner && !diceRolling ? (
+            <div className="animate-bounce-in">
+              <p className="text-sm font-bold text-wa-green truncate">🏆 {diceWinner}</p>
+              <p className="text-[10px] text-gray-500">Winner!</p>
+            </div>
           ) : (
             <>
-              <p className="text-sm font-bold text-amber-400 truncate">{leading.optionText}</p>
-              <p className="text-[10px] text-gray-500">Leading ({leading.count})</p>
+              <p className="text-sm font-bold text-amber-400 truncate">
+                {isTie ? tiedOptions.map((o) => o.optionText).join(" / ") : leading.optionText}
+              </p>
+              <p className="text-[10px] text-gray-500">
+                {isTie ? `Tie! (${tiedOptions.length})` : `Leading (${leading.count})`}
+              </p>
             </>
           )}
         </div>
@@ -2340,6 +2396,156 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Dice countdown overlay */}
+      {diceRolling && diceCountdown !== null && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-md"
+          style={{ animation: "winnerFadeIn 0.3s ease-out" }}
+        >
+          <div className="flex flex-col items-center gap-6 px-6">
+            {/* 3D Dice */}
+            <div className="dice-scene">
+              <div className="dice-cube">
+                <div className="dice-face face-front" />
+                <div className="dice-face face-back" />
+                <div className="dice-face face-right" />
+                <div className="dice-face face-left" />
+                <div className="dice-face face-top" />
+                <div className="dice-face face-bottom" />
+              </div>
+            </div>
+            <div className="text-center">
+              <p className="text-6xl sm:text-8xl font-black text-white tabular-nums" style={{ animation: "dicePulse 1s ease-in-out infinite" }}>
+                {diceCountdown}
+              </p>
+            </div>
+            <div className="h-12 flex items-center">
+              <p className="text-2xl sm:text-3xl font-bold text-cyan-400 truncate animate-pulse max-w-[80vw]">
+                {diceCurrentOption || "..."}
+              </p>
+            </div>
+            <p className="text-sm text-gray-500 tracking-wider uppercase">Picking a winner...</p>
+          </div>
+          <style>{`
+            .dice-scene {
+              width: 90px;
+              height: 90px;
+              perspective: 400px;
+              animation: diceBounce 1.2s ease-in-out infinite;
+            }
+            .dice-cube {
+              width: 100%;
+              height: 100%;
+              position: relative;
+              transform-style: preserve-3d;
+              animation: diceRoll 3s ease-in-out infinite;
+            }
+            .dice-face {
+              position: absolute;
+              width: 90px;
+              height: 90px;
+              background: #fff;
+              border: 2px solid #ccc;
+              border-radius: 12px;
+              box-shadow: inset 0 0 12px rgba(0,0,0,0.08);
+            }
+            .dice-face::before {
+              content: '';
+              position: absolute;
+              width: 16px;
+              height: 16px;
+              background: #222;
+              border-radius: 50%;
+              top: 50%;
+              left: 50%;
+              transform: translate(-50%, -50%);
+            }
+
+            /* Face 1 - front (single center dot) */
+            .face-front {
+              transform: translateZ(45px);
+            }
+
+            /* Face 6 - back */
+            .face-back {
+              transform: rotateY(180deg) translateZ(45px);
+            }
+            .face-back::before {
+              background: transparent;
+              box-shadow:
+                -22px -24px 0 0 #222,
+                -22px  0px 0 0 #222,
+                -22px  24px 0 0 #222,
+                 22px -24px 0 0 #222,
+                 22px  0px 0 0 #222,
+                 22px  24px 0 0 #222;
+            }
+
+            /* Face 2 - right */
+            .face-right {
+              transform: rotateY(90deg) translateZ(45px);
+            }
+            .face-right::before {
+              background: transparent;
+              box-shadow:
+                -22px -24px 0 0 #222,
+                 22px  24px 0 0 #222;
+            }
+
+            /* Face 5 - left */
+            .face-left {
+              transform: rotateY(-90deg) translateZ(45px);
+            }
+            .face-left::before {
+              box-shadow:
+                -22px -24px 0 0 #222,
+                -22px  24px 0 0 #222,
+                 22px -24px 0 0 #222,
+                 22px  24px 0 0 #222;
+            }
+
+            /* Face 3 - top */
+            .face-top {
+              transform: rotateX(90deg) translateZ(45px);
+            }
+            .face-top::before {
+              box-shadow:
+                -22px  24px 0 0 #222,
+                 22px -24px 0 0 #222;
+            }
+
+            /* Face 4 - bottom */
+            .face-bottom {
+              transform: rotateX(-90deg) translateZ(45px);
+            }
+            .face-bottom::before {
+              background: transparent;
+              box-shadow:
+                -22px -24px 0 0 #222,
+                -22px  24px 0 0 #222,
+                 22px -24px 0 0 #222,
+                 22px  24px 0 0 #222;
+            }
+
+            @keyframes diceRoll {
+              0%   { transform: rotateX(0deg)   rotateY(0deg)   rotateZ(0deg); }
+              25%  { transform: rotateX(90deg)  rotateY(180deg) rotateZ(45deg); }
+              50%  { transform: rotateX(180deg) rotateY(360deg) rotateZ(90deg); }
+              75%  { transform: rotateX(270deg) rotateY(540deg) rotateZ(135deg); }
+              100% { transform: rotateX(360deg) rotateY(720deg) rotateZ(180deg); }
+            }
+            @keyframes diceBounce {
+              0%, 100% { transform: translateY(0); }
+              50%      { transform: translateY(-30px); }
+            }
+            @keyframes dicePulse {
+              0%, 100% { opacity: 1; transform: scale(1); }
+              50% { opacity: 0.7; transform: scale(0.95); }
+            }
+          `}</style>
         </div>
       )}
 

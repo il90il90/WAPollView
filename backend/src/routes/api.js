@@ -352,6 +352,17 @@ module.exports = function (prisma) {
     res.json({ success: true, effect });
   });
 
+  router.post("/viewer-dice-roll", (req, res) => {
+    const { options, winner, pollId } = req.body;
+    if (!options || !winner) return res.status(400).json({ error: "options and winner required" });
+    console.log(`[API] Dice roll broadcast: ${options.join(" vs ")} → winner: ${winner}`);
+    const io = req.app.get("io");
+    if (io) {
+      io.emit("viewer_dice_roll", { options, winner, pollId });
+    }
+    res.json({ success: true });
+  });
+
   router.post("/viewer-announce-winner", (req, res) => {
     const { winner } = req.body;
     if (!winner) return res.status(400).json({ error: "winner required" });
