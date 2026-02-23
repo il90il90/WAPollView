@@ -2701,7 +2701,7 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
     <div className="space-y-4">
       <VoteSplash splashes={voteSplashes} />
       {/* Header */}
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
           {!isViewer && (
             <button onClick={onBack} className="w-8 h-8 rounded-lg bg-gray-800 flex items-center justify-center hover:bg-gray-700 transition-colors shrink-0">
@@ -2715,7 +2715,7 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
             <p className="text-gray-400 text-xs truncate">{group?.name}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 flex-wrap shrink-0">
           <button onClick={fetchData} className="p-1.5 rounded-lg hover:bg-gray-800 transition-colors" title="Refresh">
             <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
