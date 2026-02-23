@@ -1387,6 +1387,14 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
   const [template, setTemplate] = useState(() => localStorage.getItem("pollTemplate") || "classic");
   const [effect, setEffect] = useState(() => localStorage.getItem("pollEffect") || "confetti");
   const [showPdfModal, setShowPdfModal] = useState(false);
+  const [diceRolling, setDiceRolling] = useState(false);
+  const [diceWinner, setDiceWinner] = useState(null);
+  const [diceCurrentOption, setDiceCurrentOption] = useState(null);
+  const [showWinnerOverlay, setShowWinnerOverlay] = useState(false);
+  const diceIntervalRef = useRef(null);
+  const diceTimeoutRef = useRef(null);
+  const winnerOverlayTimerRef = useRef(null);
+  const winnerFireworksRef = useRef(null);
   const prevTotalRef = useRef(0);
   const refreshTimerRef = useRef(null);
   const splashIdRef = useRef(0);
@@ -1726,6 +1734,60 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
 
   const leading = votes.reduce((best, v) => (v.count > best.count ? v : best), { count: 0, optionText: "-" });
 
+  const maxCount = leading.count;
+  const tiedOptions = maxCount > 0 ? votes.filter((v) => v.count === maxCount) : [];
+  const isTie = tiedOptions.length > 1;
+
+  const handleDiceClick = () => {
+    if (diceRolling || !isTie) return;
+    setDiceRolling(true);
+    setDiceWinner(null);
+    let idx = 0;
+    diceIntervalRef.current = setInterval(() => {
+      idx = (idx + 1) % tiedOptions.length;
+      setDiceCurrentOption(tiedOptions[idx].optionText);
+    }, 120);
+    diceTimeoutRef.current = setTimeout(() => {
+      clearInterval(diceIntervalRef.current);
+      const winner = tiedOptions[Math.floor(Math.random() * tiedOptions.length)];
+      setDiceCurrentOption(null);
+      setDiceWinner(winner.optionText);
+      setDiceRolling(false);
+      setShowWinnerOverlay(true);
+      fireEffect("fireworks");
+      setTimeout(() => fireEffect("confetti"), 600);
+      winnerFireworksRef.current = setInterval(() => {
+        fireEffect("fireworks");
+      }, 1500);
+      winnerOverlayTimerRef.current = setTimeout(() => {
+        setShowWinnerOverlay(false);
+        if (winnerFireworksRef.current) clearInterval(winnerFireworksRef.current);
+      }, 6000);
+    }, 5000);
+  };
+
+  useEffect(() => {
+    if (!isTie) {
+      setDiceWinner(null);
+      setDiceCurrentOption(null);
+      setDiceRolling(false);
+      setShowWinnerOverlay(false);
+      if (diceIntervalRef.current) clearInterval(diceIntervalRef.current);
+      if (diceTimeoutRef.current) clearTimeout(diceTimeoutRef.current);
+      if (winnerOverlayTimerRef.current) clearTimeout(winnerOverlayTimerRef.current);
+      if (winnerFireworksRef.current) clearInterval(winnerFireworksRef.current);
+    }
+  }, [isTie, votes]);
+
+  useEffect(() => {
+    return () => {
+      if (diceIntervalRef.current) clearInterval(diceIntervalRef.current);
+      if (diceTimeoutRef.current) clearTimeout(diceTimeoutRef.current);
+      if (winnerOverlayTimerRef.current) clearTimeout(winnerOverlayTimerRef.current);
+      if (winnerFireworksRef.current) clearInterval(winnerFireworksRef.current);
+    };
+  }, []);
+
   const allVoters = (() => {
     if (!isMultiSelect) {
       return votes.flatMap((v) =>
@@ -1830,8 +1892,34 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
           </div>
         )}
         <div className="card p-3 text-center">
-          <p className="text-sm font-bold text-amber-400 truncate">{leading.optionText}</p>
-          <p className="text-[10px] text-gray-500">Leading ({leading.count})</p>
+          {isTie ? (
+            diceWinner ? (
+              <div className="animate-bounce-in">
+                <p className="text-sm font-bold text-wa-green truncate">🏆 {diceWinner}</p>
+                <p className="text-[10px] text-gray-500">Winner!</p>
+              </div>
+            ) : diceRolling ? (
+              <div className="flex flex-col items-center gap-1">
+                <div className="text-2xl animate-spin" style={{ animationDuration: "0.6s" }}>🎲</div>
+                <p className="text-xs font-bold text-cyan-400 truncate animate-pulse">{diceCurrentOption || "..."}</p>
+              </div>
+            ) : (
+              <button onClick={handleDiceClick} className="w-full group flex flex-col items-center gap-1 focus:outline-none">
+                <div className="relative">
+                  <div className="text-3xl transition-transform duration-300 group-hover:scale-125 group-hover:rotate-12 group-active:scale-95 drop-shadow-[0_0_12px_rgba(59,130,246,0.5)]">
+                    🎲
+                  </div>
+                  <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-red-500 animate-pulse shadow-lg shadow-red-500/50" />
+                </div>
+                <p className="text-[10px] text-amber-400 font-bold">Tie! ({tiedOptions.length}) — Click to roll</p>
+              </button>
+            )
+          ) : (
+            <>
+              <p className="text-sm font-bold text-amber-400 truncate">{leading.optionText}</p>
+              <p className="text-[10px] text-gray-500">Leading ({leading.count})</p>
+            </>
+          )}
         </div>
       </div>
       {isMultiSelect && (
@@ -2091,6 +2179,49 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Winner celebration overlay */}
+      {showWinnerOverlay && diceWinner && (
+        <div
+          className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          onClick={() => {
+            setShowWinnerOverlay(false);
+            if (winnerFireworksRef.current) clearInterval(winnerFireworksRef.current);
+          }}
+          style={{ animation: "winnerFadeIn 0.5s ease-out" }}
+        >
+          <div className="flex flex-col items-center gap-4 px-6" style={{ animation: "winnerScaleIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)" }}>
+            <div className="text-7xl sm:text-8xl" style={{ animation: "winnerTrophyBounce 1s ease-in-out infinite" }}>🏆</div>
+            <div className="text-center">
+              <p className="text-lg sm:text-xl text-amber-400 font-bold tracking-widest uppercase mb-2" style={{ animation: "winnerFadeIn 0.8s ease-out 0.3s both" }}>Winner</p>
+              <p className="text-3xl sm:text-5xl font-black text-white drop-shadow-[0_0_30px_rgba(37,211,102,0.6)]" style={{ animation: "winnerFadeIn 0.8s ease-out 0.5s both" }}>{diceWinner}</p>
+            </div>
+            <div className="flex gap-2 mt-2" style={{ animation: "winnerFadeIn 0.8s ease-out 0.7s both" }}>
+              {["🎉", "⭐", "🎊", "✨", "🎆"].map((e, i) => (
+                <span key={i} className="text-2xl sm:text-3xl" style={{ animation: `winnerStarFloat 1.5s ease-in-out ${i * 0.2}s infinite alternate` }}>{e}</span>
+              ))}
+            </div>
+          </div>
+          <style>{`
+            @keyframes winnerFadeIn {
+              from { opacity: 0; }
+              to { opacity: 1; }
+            }
+            @keyframes winnerScaleIn {
+              from { opacity: 0; transform: scale(0.3) rotate(-10deg); }
+              to { opacity: 1; transform: scale(1) rotate(0deg); }
+            }
+            @keyframes winnerTrophyBounce {
+              0%, 100% { transform: translateY(0) scale(1); }
+              50% { transform: translateY(-16px) scale(1.1); }
+            }
+            @keyframes winnerStarFloat {
+              from { transform: translateY(0) scale(1); }
+              to { transform: translateY(-10px) scale(1.2); }
+            }
+          `}</style>
         </div>
       )}
     </div>
