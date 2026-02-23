@@ -9,14 +9,17 @@ export default function Step2Groups({ socket, onSelectPoll, onNewPoll }) {
   const [expandedGroup, setExpandedGroup] = useState(null);
   const [filter, setFilter] = useState("all");
   const [sharedPollId, setSharedPollId] = useState(null);
+  const [sharedPollData, setSharedPollData] = useState(null);
 
   const fetchSharedPoll = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/api/viewer-poll`);
       const data = await res.json();
       setSharedPollId(data.poll?.id || null);
+      setSharedPollData(data.poll ? { poll: data.poll, group: data.group } : null);
     } catch {
       setSharedPollId(null);
+      setSharedPollData(null);
     }
   }, []);
 
@@ -94,6 +97,38 @@ export default function Step2Groups({ socket, onSelectPoll, onNewPoll }) {
           Refresh
         </button>
       </div>
+
+      {/* Active poll shortcut */}
+      {sharedPollData && (
+        <button
+          onClick={() => onSelectPoll(sharedPollData.group, sharedPollData.poll)}
+          className="w-full flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-red-500/10 to-orange-500/10 border border-red-500/30 hover:border-red-500/60 hover:from-red-500/15 hover:to-orange-500/15 transition-all group"
+        >
+          <div className="w-12 h-12 rounded-xl bg-red-500/20 flex items-center justify-center text-xl shrink-0 group-hover:bg-red-500/30 transition-colors">
+            📡
+          </div>
+          <div className="text-left min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-bold text-white group-hover:text-red-400 transition-colors truncate">
+                {sharedPollData.poll.title}
+              </p>
+              <span className="shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-red-500 text-white text-[9px] font-bold animate-pulse">
+                <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                On Air
+              </span>
+            </div>
+            <p className="text-xs text-gray-400 mt-0.5">
+              {sharedPollData.group?.name || "Unknown group"} · {sharedPollData.poll.options?.length || 0} options
+            </p>
+          </div>
+          <svg
+            className="w-5 h-5 text-gray-500 group-hover:text-red-400 shrink-0 transition-colors"
+            fill="none" viewBox="0 0 24 24" stroke="currentColor"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+      )}
 
       {/* Search */}
       <div className="relative">
