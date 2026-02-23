@@ -503,7 +503,10 @@ function VoteSplash({ splashes }) {
 const TEMPLATES = [
   { key: "classic", label: "Classic", icon: "📊" },
   { key: "pie", label: "Pie", icon: "🍩" },
+  { key: "donut", label: "Donut", icon: "🔘" },
   { key: "bars", label: "Bars", icon: "📶" },
+  { key: "hbars", label: "H-Bars", icon: "📊" },
+  { key: "stacked", label: "Stacked", icon: "📚" },
   { key: "radial", label: "Radial", icon: "🎯" },
   { key: "race", label: "Race", icon: "🏁" },
   { key: "podium", label: "Podium", icon: "🏆" },
@@ -515,6 +518,15 @@ const TEMPLATES = [
   { key: "waffle", label: "Waffle", icon: "🧇" },
   { key: "funnel", label: "Funnel", icon: "🔻" },
   { key: "emoji", label: "Emoji War", icon: "😎" },
+  { key: "treemap", label: "Treemap", icon: "🗺️" },
+  { key: "wordcloud", label: "Word Cloud", icon: "☁️" },
+  { key: "thermometer", label: "Thermometer", icon: "🌡️" },
+  { key: "rings", label: "Progress Rings", icon: "⭕" },
+  { key: "heatmap", label: "Heatmap", icon: "🟥" },
+  { key: "scoreboard", label: "Scoreboard", icon: "🔢" },
+  { key: "bracket", label: "Bracket", icon: "🏅" },
+  { key: "countdown", label: "Countdown", icon: "✈️" },
+  { key: "leaderboard", label: "Leaderboard", icon: "📋" },
 ];
 
 const ANIMATED_TEMPLATES = [
@@ -522,6 +534,10 @@ const ANIMATED_TEMPLATES = [
   { key: "slots", label: "Slot Machine", icon: "🎰" },
   { key: "particles", label: "Particles", icon: "✨" },
   { key: "bigscreen", label: "Big Screen", icon: "🖥️" },
+  { key: "horserace", label: "Horse Race", icon: "🏇" },
+  { key: "balloon", label: "Balloon Rise", icon: "🎈" },
+  { key: "tugofwar", label: "Tug of War", icon: "🪢" },
+  { key: "carrace", label: "Car Race", icon: "🏎️" },
 ];
 
 function TemplateClassic({ votes, chartData, totalVotes, COLORS: colors, uniqueVoters, isMultiSelect, pctBase }) {
@@ -1067,6 +1083,458 @@ function TemplateEmoji({ votes, totalVotes, COLORS: colors, pctBase }) {
   );
 }
 
+function TemplateTreemap({ votes, totalVotes, COLORS: colors, pctBase, isMultiSelect, uniqueVoters }) {
+  if (votes.length === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
+  const sorted = [...votes].sort((a, b) => b.count - a.count);
+  const total = pctBase || 1;
+  return (
+    <div className="card p-4 space-y-3">
+      <div className="flex flex-wrap gap-1.5" style={{ minHeight: 280 }}>
+        {sorted.map((v, idx) => {
+          const origIdx = votes.indexOf(v);
+          const color = colors[origIdx % colors.length];
+          const pct = (v.count / total) * 100;
+          const area = Math.max(pct, 5);
+          return (
+            <div
+              key={v.optionId || idx}
+              className="rounded-lg flex flex-col items-center justify-center text-center p-2 transition-all duration-700 relative overflow-hidden"
+              style={{
+                flexBasis: `${Math.max(area - 1, 8)}%`,
+                flexGrow: area,
+                minHeight: 80,
+                background: `linear-gradient(135deg, ${color}30, ${color}10)`,
+                border: `2px solid ${color}55`,
+              }}
+            >
+              <span className="text-2xl md:text-3xl font-black" style={{ color }}>{v.count}</span>
+              <span className="text-[10px] md:text-xs font-bold text-gray-200 truncate max-w-full mt-1">{v.optionText}</span>
+              <span className="text-[9px] text-gray-500">{pct.toFixed(0)}%</span>
+            </div>
+          );
+        })}
+      </div>
+      <p className="text-center text-xs text-gray-500">{isMultiSelect ? `${uniqueVoters} voters · ${totalVotes} selections` : `${totalVotes} total votes`}</p>
+    </div>
+  );
+}
+
+function TemplateDonut({ chartData, totalVotes, COLORS: colors, uniqueVoters, isMultiSelect, pctBase }) {
+  if (chartData.length === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
+  const hasVotes = totalVotes > 0;
+  const pieData = hasVotes
+    ? chartData.filter((d) => d.votes > 0).map((d) => ({ ...d, fill: colors[chartData.indexOf(d) % colors.length] }))
+    : chartData.map((d, i) => ({ ...d, votes: 1, fill: colors[i % colors.length] }));
+  return (
+    <div className="card p-6">
+      <div className="relative">
+        <ResponsiveContainer width="100%" height={350}>
+          <PieChart>
+            <Pie data={pieData} dataKey="votes" nameKey="fullName" cx="50%" cy="50%" innerRadius={90} outerRadius={140} paddingAngle={2} animationDuration={800} labelLine={false}>
+              {pieData.map((entry, idx) => (<Cell key={idx} fill={entry.fill} />))}
+            </Pie>
+            <Tooltip contentStyle={{ background: "#1F2937", border: "1px solid #374151", borderRadius: "12px", color: "#F9FAFB", fontSize: "12px" }} formatter={(value) => [`${value} votes`]} />
+          </PieChart>
+        </ResponsiveContainer>
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+          <span className="text-4xl md:text-5xl font-black text-white">{isMultiSelect ? uniqueVoters : totalVotes}</span>
+          <span className="text-xs text-gray-400">{isMultiSelect ? "voters" : "votes"}</span>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 mt-2">
+        {chartData.map((d, idx) => {
+          const color = colors[idx % colors.length];
+          const pct = pctBase > 0 ? (d.votes / pctBase * 100).toFixed(0) : 0;
+          return (
+            <div key={idx} className="flex items-center gap-1.5 text-xs">
+              <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: color }} />
+              <span className="text-gray-300">{d.fullName}</span>
+              <span className="text-gray-500">{d.votes} ({pct}%)</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function TemplateHorizontalBars({ votes, totalVotes, COLORS: colors, pctBase }) {
+  if (votes.length === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
+  const max = Math.max(...votes.map((v) => v.count), 1);
+  return (
+    <div className="card p-5 space-y-3">
+      {votes.map((v, idx) => {
+        const color = colors[idx % colors.length];
+        const barW = max > 0 ? (v.count / max) * 100 : 0;
+        const pct = pctBase > 0 ? (v.count / pctBase) * 100 : 0;
+        return (
+          <div key={v.optionId || idx} className="flex items-center gap-3">
+            <span className="text-xs md:text-sm font-bold text-gray-300 w-24 md:w-32 text-right truncate">{v.optionText}</span>
+            <div className="flex-1 bg-gray-800 rounded-full h-7 overflow-hidden relative">
+              <div
+                className="h-full rounded-full transition-all duration-700 ease-out flex items-center justify-end pr-2"
+                style={{ width: `${Math.max(barW, 3)}%`, backgroundColor: color }}
+              >
+                {barW > 20 && <span className="text-xs font-bold text-white/90">{v.count}</span>}
+              </div>
+            </div>
+            {barW <= 20 && <span className="text-sm font-bold shrink-0" style={{ color }}>{v.count}</span>}
+            <span className="text-xs text-gray-500 shrink-0 w-10 text-right">{pct.toFixed(0)}%</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function TemplateStacked({ votes, totalVotes, COLORS: colors, pctBase, isMultiSelect, uniqueVoters }) {
+  if (votes.length === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
+  return (
+    <div className="card p-6 space-y-4">
+      <div className="w-full bg-gray-800 rounded-xl h-16 md:h-20 overflow-hidden flex">
+        {votes.map((v, idx) => {
+          const color = colors[idx % colors.length];
+          const pct = pctBase > 0 ? (v.count / pctBase) * 100 : 0;
+          if (pct === 0) return null;
+          return (
+            <div
+              key={v.optionId || idx}
+              className="h-full flex items-center justify-center transition-all duration-700 relative overflow-hidden"
+              style={{ width: `${pct}%`, backgroundColor: color, minWidth: v.count > 0 ? 20 : 0 }}
+              title={`${v.optionText}: ${v.count} (${pct.toFixed(0)}%)`}
+            >
+              {pct > 8 && <span className="text-xs md:text-sm font-black text-white truncate px-1">{v.count}</span>}
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
+        {votes.map((v, idx) => {
+          const color = colors[idx % colors.length];
+          const pct = pctBase > 0 ? (v.count / pctBase) * 100 : 0;
+          return (
+            <div key={v.optionId || idx} className="flex items-center gap-1.5 text-xs">
+              <span className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: color }} />
+              <span className="text-gray-300 font-medium">{v.optionText}</span>
+              <span className="text-gray-500">{v.count} ({pct.toFixed(0)}%)</span>
+            </div>
+          );
+        })}
+      </div>
+      <p className="text-center text-2xl font-black text-white">{isMultiSelect ? uniqueVoters : totalVotes} <span className="text-sm font-normal text-gray-500">{isMultiSelect ? "voters" : "votes"}</span></p>
+    </div>
+  );
+}
+
+function TemplateWordCloud({ votes, totalVotes, COLORS: colors, pctBase }) {
+  if (votes.length === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
+  const max = Math.max(...votes.map((v) => v.count), 1);
+  const shuffled = [...votes].sort(() => Math.random() - 0.5);
+  return (
+    <div className="card p-6">
+      <div className="flex flex-wrap items-center justify-center gap-3 md:gap-4 min-h-[250px] py-4">
+        {shuffled.map((v, idx) => {
+          const origIdx = votes.indexOf(v);
+          const color = colors[origIdx % colors.length];
+          const ratio = max > 0 ? v.count / max : 0;
+          const fontSize = Math.max(12, Math.round(14 + ratio * 40));
+          const opacity = 0.4 + ratio * 0.6;
+          return (
+            <span
+              key={v.optionId || idx}
+              className="font-black transition-all duration-500 cursor-default hover:scale-110"
+              style={{ fontSize, color, opacity, textShadow: `0 0 ${ratio * 20}px ${color}44` }}
+              title={`${v.optionText}: ${v.count} votes`}
+            >
+              {v.optionText}
+              <sup className="text-[10px] ml-0.5 font-normal text-gray-500">{v.count}</sup>
+            </span>
+          );
+        })}
+      </div>
+      <p className="text-center text-xs text-gray-500 mt-2">{totalVotes} total votes</p>
+    </div>
+  );
+}
+
+function TemplateThermometer({ votes, totalVotes, COLORS: colors, pctBase }) {
+  if (votes.length === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
+  const max = Math.max(...votes.map((v) => v.count), 1);
+  return (
+    <div className="card p-5">
+      <div className="flex items-end justify-center gap-4 md:gap-6" style={{ minHeight: 300 }}>
+        {votes.map((v, idx) => {
+          const color = colors[idx % colors.length];
+          const fillPct = max > 0 ? (v.count / max) * 100 : 0;
+          const pct = pctBase > 0 ? (v.count / pctBase) * 100 : 0;
+          return (
+            <div key={v.optionId || idx} className="flex flex-col items-center gap-2" style={{ width: `${Math.max(100 / votes.length, 14)}%`, maxWidth: 80 }}>
+              <span className="text-sm font-black" style={{ color }}>{v.count}</span>
+              <div className="w-full bg-gray-800 rounded-full relative overflow-hidden" style={{ height: 200 }}>
+                <div
+                  className="absolute bottom-0 left-0 right-0 rounded-full transition-all duration-700"
+                  style={{ height: `${Math.max(fillPct, 3)}%`, backgroundColor: color, boxShadow: `inset 0 0 15px ${color}44, 0 0 8px ${color}33` }}
+                />
+              </div>
+              <div className="w-6 h-6 rounded-full shrink-0" style={{ backgroundColor: color, boxShadow: `0 0 10px ${color}66` }} />
+              <span className="text-[10px] md:text-xs font-bold text-gray-300 text-center truncate w-full">{v.optionText}</span>
+              <span className="text-[9px] text-gray-500">{pct.toFixed(0)}%</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function TemplateProgressRings({ votes, totalVotes, COLORS: colors, pctBase, isMultiSelect, uniqueVoters }) {
+  if (votes.length === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
+  const radius = 40;
+  const circumference = 2 * Math.PI * radius;
+  return (
+    <div className="card p-5">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        {votes.map((v, idx) => {
+          const color = colors[idx % colors.length];
+          const pct = pctBase > 0 ? (v.count / pctBase) * 100 : 0;
+          const offset = circumference - (pct / 100) * circumference;
+          return (
+            <div key={v.optionId || idx} className="flex flex-col items-center">
+              <svg width="100" height="100" viewBox="0 0 100 100" className="transform -rotate-90">
+                <circle cx="50" cy="50" r={radius} fill="none" stroke="#1F2937" strokeWidth="8" />
+                <circle
+                  cx="50" cy="50" r={radius} fill="none" stroke={color} strokeWidth="8" strokeLinecap="round"
+                  strokeDasharray={circumference} strokeDashoffset={offset}
+                  className="transition-all duration-700"
+                  style={{ filter: `drop-shadow(0 0 4px ${color}66)` }}
+                />
+              </svg>
+              <div className="flex flex-col items-center -mt-16 relative z-10">
+                <span className="text-xl font-black" style={{ color }}>{v.count}</span>
+                <span className="text-[9px] text-gray-500">{pct.toFixed(0)}%</span>
+              </div>
+              <span className="text-xs font-bold text-gray-300 mt-4 truncate max-w-full text-center">{v.optionText}</span>
+            </div>
+          );
+        })}
+      </div>
+      <p className="text-center text-xs text-gray-500 mt-4">{isMultiSelect ? `${uniqueVoters} voters` : `${totalVotes} votes`}</p>
+    </div>
+  );
+}
+
+function TemplateHeatmap({ votes, totalVotes, COLORS: colors, pctBase }) {
+  if (votes.length === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
+  const max = Math.max(...votes.map((v) => v.count), 1);
+  const cols = Math.min(votes.length, 4);
+  return (
+    <div className="card p-5 space-y-3">
+      <div className={`grid gap-2`} style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
+        {votes.map((v, idx) => {
+          const intensity = max > 0 ? v.count / max : 0;
+          const pct = pctBase > 0 ? (v.count / pctBase) * 100 : 0;
+          const r = Math.round(30 + intensity * 225);
+          const g = Math.round(30 + (1 - intensity) * 60);
+          const b = Math.round(30 + (1 - intensity) * 40);
+          const bg = `rgb(${r}, ${g}, ${b})`;
+          return (
+            <div
+              key={v.optionId || idx}
+              className="rounded-xl p-4 flex flex-col items-center justify-center text-center transition-all duration-700"
+              style={{ backgroundColor: bg, minHeight: 100, boxShadow: intensity > 0.5 ? `0 0 ${intensity * 20}px rgba(${r},${g},${b},0.4)` : "none" }}
+            >
+              <span className="text-2xl md:text-3xl font-black text-white">{v.count}</span>
+              <span className="text-xs font-bold text-white/80 truncate max-w-full mt-1">{v.optionText}</span>
+              <span className="text-[10px] text-white/50">{pct.toFixed(0)}%</span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex items-center justify-center gap-1 mt-2">
+        <span className="text-[10px] text-gray-500">Low</span>
+        <div className="flex gap-0.5">
+          {[0.1, 0.3, 0.5, 0.7, 0.9].map((i) => (
+            <div key={i} className="w-6 h-3 rounded-sm" style={{ backgroundColor: `rgb(${Math.round(30 + i * 225)}, ${Math.round(30 + (1-i)*60)}, ${Math.round(30 + (1-i)*40)})` }} />
+          ))}
+        </div>
+        <span className="text-[10px] text-gray-500">High</span>
+      </div>
+    </div>
+  );
+}
+
+function TemplateScoreboard({ votes, totalVotes, COLORS: colors, pctBase, isMultiSelect, uniqueVoters }) {
+  if (votes.length === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
+  const sorted = [...votes].sort((a, b) => b.count - a.count);
+  return (
+    <div className="card p-0 overflow-hidden" style={{ background: "#0a0a0a" }}>
+      <div className="text-center py-3 border-b border-gray-800" style={{ background: "linear-gradient(90deg, #1a1a2e, #16213e, #1a1a2e)" }}>
+        <p className="text-xs uppercase tracking-[0.4em] font-black text-amber-400" style={{ fontFamily: "'Courier New', monospace" }}>SCOREBOARD</p>
+      </div>
+      <div className="p-3 space-y-1">
+        {sorted.map((v, idx) => {
+          const origIdx = votes.indexOf(v);
+          const color = colors[origIdx % colors.length];
+          const pct = pctBase > 0 ? (v.count / pctBase) * 100 : 0;
+          return (
+            <div
+              key={v.optionId || idx}
+              className="flex items-center gap-3 px-3 py-2 rounded-lg transition-all"
+              style={{ background: idx === 0 ? `linear-gradient(90deg, ${color}15, transparent)` : "transparent", fontFamily: "'Courier New', monospace" }}
+            >
+              <span className="text-lg font-black w-8 text-center" style={{ color: idx < 3 ? color : "#6B7280" }}>{idx + 1}.</span>
+              <span className="flex-1 text-sm font-bold text-gray-200 truncate">{v.optionText}</span>
+              <div className="flex gap-1 shrink-0">
+                {String(v.count).padStart(3, "0").split("").map((digit, di) => (
+                  <span
+                    key={di}
+                    className="w-7 h-9 rounded flex items-center justify-center text-lg font-black"
+                    style={{ backgroundColor: "#1a1a2e", color, border: `1px solid ${color}33`, textShadow: `0 0 8px ${color}88` }}
+                  >
+                    {digit}
+                  </span>
+                ))}
+              </div>
+              <span className="text-[10px] text-gray-500 w-10 text-right">{pct.toFixed(0)}%</span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="border-t border-gray-800 px-4 py-2 flex justify-between text-[10px] text-gray-600" style={{ fontFamily: "'Courier New', monospace" }}>
+        <span>{isMultiSelect ? `${uniqueVoters} PLR` : `${totalVotes} TOTAL`}</span>
+        <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />LIVE</span>
+      </div>
+    </div>
+  );
+}
+
+function TemplateBracket({ votes, totalVotes, COLORS: colors, pctBase }) {
+  if (votes.length === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
+  const sorted = [...votes].sort((a, b) => b.count - a.count);
+  const pairs = [];
+  for (let i = 0; i < sorted.length; i += 2) {
+    pairs.push(sorted.slice(i, i + 2));
+  }
+  const winner = sorted[0];
+  const winnerOrigIdx = votes.indexOf(winner);
+  return (
+    <div className="card p-5 space-y-4">
+      <p className="text-center text-[10px] uppercase tracking-[0.3em] text-gray-500 font-bold">Tournament Bracket</p>
+      <div className="flex items-center gap-4 md:gap-8">
+        <div className="flex-1 space-y-3">
+          {pairs.map((pair, pi) => (
+            <div key={pi} className="space-y-1 rounded-xl p-2" style={{ background: "rgba(31,41,55,0.3)" }}>
+              {pair.map((v, vi) => {
+                const origIdx = votes.indexOf(v);
+                const color = colors[origIdx % colors.length];
+                const pct = pctBase > 0 ? (v.count / pctBase) * 100 : 0;
+                const isWinning = pair.length === 2 ? v.count >= pair[1 - vi].count : true;
+                return (
+                  <div
+                    key={v.optionId || vi}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg transition-all"
+                    style={{
+                      background: isWinning ? `linear-gradient(90deg, ${color}18, transparent)` : "transparent",
+                      border: `1px solid ${isWinning ? color + "44" : "#374151"}`,
+                    }}
+                  >
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                    <span className={`text-xs md:text-sm flex-1 truncate ${isWinning ? "font-bold text-white" : "text-gray-500"}`}>{v.optionText}</span>
+                    <span className="text-sm font-black" style={{ color }}>{v.count}</span>
+                    <span className="text-[9px] text-gray-500">({pct.toFixed(0)}%)</span>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+        <div className="shrink-0 flex flex-col items-center gap-2 px-4 py-4 rounded-xl" style={{ background: `linear-gradient(135deg, ${colors[winnerOrigIdx % colors.length]}15, transparent)`, border: `2px solid ${colors[winnerOrigIdx % colors.length]}44` }}>
+          <span className="text-2xl">🏆</span>
+          <span className="text-sm font-black text-white text-center">{winner.optionText}</span>
+          <span className="text-2xl font-black" style={{ color: colors[winnerOrigIdx % colors.length] }}>{winner.count}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TemplateCountdownBoard({ votes, totalVotes, COLORS: colors, pctBase, isMultiSelect, uniqueVoters }) {
+  if (votes.length === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
+  const sorted = [...votes].sort((a, b) => b.count - a.count);
+  return (
+    <div className="card p-0 overflow-hidden" style={{ background: "linear-gradient(180deg, #0c0c1d 0%, #111827 100%)" }}>
+      <div className="text-center py-3 border-b border-gray-800/50">
+        <p className="text-[10px] uppercase tracking-[0.4em] text-cyan-400 font-bold">Departure Board</p>
+      </div>
+      <div className="p-3 space-y-1">
+        {sorted.map((v, idx) => {
+          const origIdx = votes.indexOf(v);
+          const color = colors[origIdx % colors.length];
+          const pct = pctBase > 0 ? (v.count / pctBase) * 100 : 0;
+          return (
+            <div
+              key={v.optionId || idx}
+              className="flex items-center gap-2 px-2 py-2 rounded transition-all"
+              style={{ fontFamily: "'Courier New', monospace", background: idx % 2 === 0 ? "rgba(31,41,55,0.3)" : "transparent" }}
+            >
+              <span className="text-xs font-black w-6 text-center" style={{ color: idx < 3 ? "#fbbf24" : "#6B7280" }}>{idx + 1}</span>
+              <span className="flex-1 text-xs md:text-sm font-bold text-gray-200 truncate uppercase">{v.optionText}</span>
+              <div className="flex gap-0.5 shrink-0">
+                {String(v.count).split("").map((d, di) => (
+                  <span key={di} className="w-5 h-7 md:w-6 md:h-8 rounded-sm flex items-center justify-center text-sm md:text-base font-black bg-gray-900 border border-gray-700 text-amber-400" style={{ textShadow: "0 0 6px rgba(251,191,36,0.5)" }}>
+                    {d}
+                  </span>
+                ))}
+              </div>
+              <span className="text-[9px] text-gray-500 w-9 text-right">{pct.toFixed(0)}%</span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="border-t border-gray-800/50 px-4 py-2 flex justify-between text-[10px] text-gray-600" style={{ fontFamily: "'Courier New', monospace" }}>
+        <span>{isMultiSelect ? `${uniqueVoters} voters` : `${totalVotes} votes`}</span>
+        <span className="text-cyan-400/60">UPDATING...</span>
+      </div>
+    </div>
+  );
+}
+
+function TemplateLeaderboard({ votes, totalVotes, COLORS: colors, pctBase, isMultiSelect, uniqueVoters }) {
+  if (votes.length === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
+  const sorted = [...votes].sort((a, b) => b.count - a.count);
+  const max = sorted[0].count || 1;
+  const rankIcons = ["👑", "🥈", "🥉"];
+  return (
+    <div className="card p-4 space-y-2">
+      {sorted.map((v, idx) => {
+        const origIdx = votes.indexOf(v);
+        const color = colors[origIdx % colors.length];
+        const pct = pctBase > 0 ? (v.count / pctBase) * 100 : 0;
+        const barW = max > 0 ? (v.count / max) * 100 : 0;
+        return (
+          <div
+            key={v.optionId || idx}
+            className="flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-500"
+            style={{ background: idx === 0 ? `linear-gradient(90deg, ${color}12, transparent)` : "transparent", border: `1px solid ${idx === 0 ? color + "33" : "transparent"}` }}
+          >
+            <span className="text-lg w-8 text-center shrink-0">{rankIcons[idx] || <span className="text-sm font-bold text-gray-600">{idx + 1}</span>}</span>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between mb-1">
+                <span className={`text-sm font-bold truncate ${idx === 0 ? "text-white" : "text-gray-300"}`}>{v.optionText}</span>
+                <span className="text-base font-black shrink-0 ml-2" style={{ color }}>{v.count} <span className="text-[10px] text-gray-500 font-normal">({pct.toFixed(0)}%)</span></span>
+              </div>
+              <div className="w-full bg-gray-800 rounded-full h-2 overflow-hidden">
+                <div className="h-full rounded-full transition-all duration-700" style={{ width: `${barW}%`, backgroundColor: color }} />
+              </div>
+            </div>
+          </div>
+        );
+      })}
+      <p className="text-center text-xs text-gray-500 pt-2">{isMultiSelect ? `${uniqueVoters} voters · ${totalVotes} selections` : `${totalVotes} total votes`}</p>
+    </div>
+  );
+}
+
 function TemplatePulse({ votes, totalVotes, COLORS: colors, pctBase }) {
   if (votes.length === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
   const sorted = [...votes].sort((a, b) => b.count - a.count);
@@ -1354,6 +1822,217 @@ function TemplateBigScreen({ votes, totalVotes, COLORS: colors, pctBase, isMulti
   );
 }
 
+function TemplateHorseRace({ votes, totalVotes, COLORS: colors, pctBase }) {
+  if (votes.length === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
+  const max = Math.max(...votes.map((v) => v.count), 1);
+  const animals = ["🐎", "🦊", "🐆", "🐂", "🦁", "🐺", "🦌", "🐘", "🦅", "🐕"];
+  const sorted = [...votes].sort((a, b) => b.count - a.count);
+  return (
+    <div className="card p-0 overflow-hidden" style={{ background: "linear-gradient(180deg, #0f1a0f 0%, #111827 100%)" }}>
+      <div className="text-center py-3 border-b border-green-900/30">
+        <p className="text-xs font-black tracking-wider text-green-400">🏇 HORSE RACE 🏇</p>
+      </div>
+      <div className="p-4 space-y-3">
+        {sorted.map((v, idx) => {
+          const origIdx = votes.indexOf(v);
+          const color = colors[origIdx % colors.length];
+          const pct = pctBase > 0 ? (v.count / pctBase) * 100 : 0;
+          const trackW = max > 0 ? (v.count / max) * 100 : 0;
+          const animal = animals[origIdx % animals.length];
+          return (
+            <div key={v.optionId || idx} className="space-y-1">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-gray-300">{v.optionText}</span>
+                <span className="font-black" style={{ color }}>{v.count} <span className="text-gray-500 font-normal">({pct.toFixed(0)}%)</span></span>
+              </div>
+              <div className="w-full bg-green-900/20 rounded-full h-8 overflow-hidden relative border border-green-900/30">
+                <div className="absolute inset-0 opacity-20" style={{ backgroundImage: "repeating-linear-gradient(90deg, transparent, transparent 9.8%, #ffffff10 10%, #ffffff10 10.2%)" }} />
+                <div className="h-full transition-all duration-1000 ease-out flex items-center justify-end relative" style={{ width: `${Math.max(trackW, 5)}%` }}>
+                  <span className="text-xl md:text-2xl relative z-10 animate-bounce" style={{ animationDuration: "0.6s" }}>{animal}</span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="border-t border-green-900/30 px-4 py-2 flex justify-between text-[10px] text-green-400/50">
+        <span>START</span>
+        <span>{totalVotes} laps</span>
+        <span>FINISH 🏁</span>
+      </div>
+    </div>
+  );
+}
+
+function TemplateBalloonRise({ votes, totalVotes, COLORS: colors, pctBase, isMultiSelect, uniqueVoters }) {
+  if (votes.length === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
+  const max = Math.max(...votes.map((v) => v.count), 1);
+  return (
+    <div className="card p-5 relative overflow-hidden" style={{ minHeight: 350, background: "linear-gradient(180deg, #0c1929 0%, #1a2744 50%, #2d3748 100%)" }}>
+      <div className="absolute bottom-0 left-0 right-0 h-2 bg-gradient-to-r from-green-800/40 via-green-700/40 to-green-800/40" />
+      <div className="flex items-end justify-center gap-4 md:gap-6" style={{ minHeight: 300 }}>
+        {votes.map((v, idx) => {
+          const color = colors[idx % colors.length];
+          const ratio = max > 0 ? v.count / max : 0;
+          const pct = pctBase > 0 ? (v.count / pctBase) * 100 : 0;
+          const bottomOffset = ratio * 220;
+          return (
+            <div
+              key={v.optionId || idx}
+              className="flex flex-col items-center transition-all duration-1000 relative"
+              style={{ transform: `translateY(-${bottomOffset}px)`, width: `${Math.max(100 / votes.length, 14)}%`, maxWidth: 100 }}
+            >
+              <span className="text-3xl md:text-4xl" style={{ filter: `drop-shadow(0 0 8px ${color}88)` }}>🎈</span>
+              <div className="w-px h-4" style={{ backgroundColor: `${color}66` }} />
+              <div className="rounded-lg px-2 py-1 text-center" style={{ background: `${color}22`, border: `1px solid ${color}44` }}>
+                <span className="text-sm font-black" style={{ color }}>{v.count}</span>
+                <span className="block text-[9px] text-gray-400 truncate max-w-[70px]">{v.optionText}</span>
+                <span className="text-[8px] text-gray-500">{pct.toFixed(0)}%</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <p className="absolute bottom-3 left-0 right-0 text-center text-[10px] text-gray-600">
+        {isMultiSelect ? `${uniqueVoters} voters` : `${totalVotes} votes`} · higher = more votes
+      </p>
+    </div>
+  );
+}
+
+function TemplateTugOfWar({ votes, totalVotes, COLORS: colors, pctBase }) {
+  if (votes.length < 2) return <TemplateRace votes={votes} totalVotes={totalVotes} COLORS={colors} pctBase={pctBase} />;
+  const sorted = [...votes].sort((a, b) => b.count - a.count);
+  const a = sorted[0];
+  const b = sorted[1];
+  const aIdx = votes.indexOf(a);
+  const bIdx = votes.indexOf(b);
+  const aColor = colors[aIdx % colors.length];
+  const bColor = colors[bIdx % colors.length];
+  const total = a.count + b.count || 1;
+  const aRatio = a.count / total;
+  const aPct = pctBase > 0 ? (a.count / pctBase) * 100 : 0;
+  const bPct = pctBase > 0 ? (b.count / pctBase) * 100 : 0;
+  const ropePos = 50 + (aRatio - 0.5) * 60;
+  const others = sorted.slice(2);
+
+  return (
+    <div className="space-y-3">
+      <div className="card p-5 space-y-4">
+        <p className="text-center text-[10px] uppercase tracking-[0.3em] text-gray-500 font-bold">Tug of War</p>
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-center flex-1">
+            <p className="text-lg md:text-xl font-black" style={{ color: aColor }}>{a.optionText}</p>
+            <p className="text-3xl md:text-4xl font-black" style={{ color: aColor }}>{a.count}</p>
+            <p className="text-xs text-gray-500">{aPct.toFixed(0)}%</p>
+          </div>
+          <span className="text-2xl font-black text-gray-600 px-3">⚡</span>
+          <div className="text-center flex-1">
+            <p className="text-lg md:text-xl font-black" style={{ color: bColor }}>{b.optionText}</p>
+            <p className="text-3xl md:text-4xl font-black" style={{ color: bColor }}>{b.count}</p>
+            <p className="text-xs text-gray-500">{bPct.toFixed(0)}%</p>
+          </div>
+        </div>
+        <div className="relative h-8 bg-gray-800 rounded-full overflow-hidden">
+          <div className="absolute inset-0 flex">
+            <div className="h-full transition-all duration-700" style={{ width: `${ropePos}%`, backgroundColor: `${aColor}44` }} />
+            <div className="h-full transition-all duration-700" style={{ width: `${100 - ropePos}%`, backgroundColor: `${bColor}44` }} />
+          </div>
+          <div
+            className="absolute top-0 bottom-0 w-3 rounded-full transition-all duration-700 z-10"
+            style={{ left: `${ropePos}%`, transform: "translateX(-50%)", backgroundColor: "#fff", boxShadow: "0 0 10px rgba(255,255,255,0.5)" }}
+          />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-sm font-black text-white z-20">🪢</span>
+          </div>
+        </div>
+        <div className="flex justify-between text-[10px] text-gray-600">
+          <span>← {a.optionText}</span>
+          <span>{b.optionText} →</span>
+        </div>
+      </div>
+      {others.length > 0 && (
+        <div className="card p-3 space-y-2">
+          <p className="text-[10px] text-gray-500 uppercase tracking-wider">Other options</p>
+          {others.map((v, i) => {
+            const origIdx = votes.indexOf(v);
+            const color = colors[origIdx % colors.length];
+            const pct = pctBase > 0 ? (v.count / pctBase) * 100 : 0;
+            return (
+              <div key={v.optionId || i} className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                <span className="text-xs text-gray-400 flex-1 truncate">{v.optionText}</span>
+                <span className="text-xs font-bold" style={{ color }}>{v.count}</span>
+                <span className="text-[9px] text-gray-500">({pct.toFixed(0)}%)</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TemplateCarRace({ votes, totalVotes, COLORS: colors, pctBase }) {
+  if (votes.length === 0) return <div className="card p-8 text-center text-gray-600">No votes yet</div>;
+  const max = Math.max(...votes.map((v) => v.count), 1);
+  const sorted = [...votes].sort((a, b) => b.count - a.count);
+  return (
+    <div className="card p-0 overflow-hidden" style={{ background: "linear-gradient(180deg, #0a0a1a 0%, #1a1a2e 50%, #2d2d44 100%)" }}>
+      <div className="text-center py-3 border-b border-gray-800/50" style={{ background: "linear-gradient(90deg, transparent, rgba(239,68,68,0.1), transparent)" }}>
+        <p className="text-xs font-black tracking-[0.3em] text-red-400">🏎️ CAR RACE 🏎️</p>
+      </div>
+      <div className="p-4 space-y-4">
+        {sorted.map((v, idx) => {
+          const origIdx = votes.indexOf(v);
+          const color = colors[origIdx % colors.length];
+          const pct = pctBase > 0 ? (v.count / pctBase) * 100 : 0;
+          const trackW = max > 0 ? (v.count / max) * 100 : 0;
+          const isLeader = idx === 0 && v.count > 0;
+          return (
+            <div key={v.optionId || idx} className="space-y-1">
+              <div className="flex items-center justify-between text-xs px-1">
+                <div className="flex items-center gap-2">
+                  {isLeader && <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-red-500 text-white">P1</span>}
+                  <span className="font-bold" style={{ color }}>{v.optionText}</span>
+                </div>
+                <span className="font-black text-white">{v.count} <span className="text-gray-500 font-normal">({pct.toFixed(0)}%)</span></span>
+              </div>
+              <div className="w-full rounded-lg h-12 overflow-hidden relative" style={{ background: `linear-gradient(90deg, #1F293744, #1F2937)`, border: "1px solid #374151" }}>
+                <div className="absolute inset-0 opacity-10" style={{ backgroundImage: "repeating-linear-gradient(90deg, transparent, transparent 9.8%, #ffffff20 10%, #ffffff20 10.2%)" }} />
+                <div className="absolute top-0 bottom-0 w-px right-[2%] opacity-30" style={{ background: "repeating-linear-gradient(180deg, #fff 0px, #fff 4px, transparent 4px, transparent 8px)" }} />
+                <div className="h-full transition-all duration-1000 ease-out flex items-center justify-end relative" style={{ width: `${Math.max(trackW, 8)}%` }}>
+                  <svg viewBox="0 0 60 28" className="h-9 w-auto mr-1 relative z-10" style={{ filter: `drop-shadow(0 0 6px ${color}88)` }}>
+                    <rect x="8" y="8" width="44" height="14" rx="4" fill={color} />
+                    <rect x="4" y="12" width="52" height="8" rx="3" fill={color} opacity="0.8" />
+                    <rect x="14" y="4" width="12" height="10" rx="2" fill={color} opacity="0.9" />
+                    <rect x="28" y="5" width="16" height="9" rx="2" fill={color} opacity="0.7" />
+                    <rect x="15" y="5" width="10" height="7" rx="1.5" fill="#88ccff" opacity="0.6" />
+                    <rect x="30" y="6" width="12" height="6" rx="1.5" fill="#88ccff" opacity="0.5" />
+                    <circle cx="16" cy="23" r="5" fill="#222" />
+                    <circle cx="16" cy="23" r="3" fill="#555" />
+                    <circle cx="44" cy="23" r="5" fill="#222" />
+                    <circle cx="44" cy="23" r="3" fill="#555" />
+                    <rect x="48" y="14" width="8" height="3" rx="1" fill="#ff4444" opacity="0.8" />
+                  </svg>
+                  {isLeader && v.count > 0 && (
+                    <div className="absolute -top-1 right-0 text-[10px] animate-pulse">💨</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="border-t border-gray-800/50 px-4 py-2 flex justify-between text-[10px] text-gray-600">
+        <span>🏁 START</span>
+        <span>{totalVotes} laps</span>
+        <span>FINISH 🏁</span>
+      </div>
+    </div>
+  );
+}
+
 function renderTemplate(templateKey, props) {
   switch (templateKey) {
     case "pie": return <TemplatePie {...props} />;
@@ -1369,10 +2048,26 @@ function renderTemplate(templateKey, props) {
     case "waffle": return <TemplateWaffle {...props} />;
     case "funnel": return <TemplateFunnel {...props} />;
     case "emoji": return <TemplateEmoji {...props} />;
+    case "treemap": return <TemplateTreemap {...props} />;
+    case "donut": return <TemplateDonut {...props} />;
+    case "hbars": return <TemplateHorizontalBars {...props} />;
+    case "stacked": return <TemplateStacked {...props} />;
+    case "wordcloud": return <TemplateWordCloud {...props} />;
+    case "thermometer": return <TemplateThermometer {...props} />;
+    case "rings": return <TemplateProgressRings {...props} />;
+    case "heatmap": return <TemplateHeatmap {...props} />;
+    case "scoreboard": return <TemplateScoreboard {...props} />;
+    case "bracket": return <TemplateBracket {...props} />;
+    case "countdown": return <TemplateCountdownBoard {...props} />;
+    case "leaderboard": return <TemplateLeaderboard {...props} />;
     case "pulse": return <TemplatePulse {...props} />;
     case "slots": return <TemplateSlots {...props} />;
     case "particles": return <TemplateParticles {...props} />;
     case "bigscreen": return <TemplateBigScreen {...props} />;
+    case "horserace": return <TemplateHorseRace {...props} />;
+    case "balloon": return <TemplateBalloonRise {...props} />;
+    case "tugofwar": return <TemplateTugOfWar {...props} />;
+    case "carrace": return <TemplateCarRace {...props} />;
     default: return <TemplateClassic {...props} />;
   }
 }
@@ -2174,8 +2869,8 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
 
       {/* Template picker (Admin only) */}
       {tab === "results" && !isViewer && (
-        <div className="space-y-2">
-          <div className="flex items-center gap-1.5 flex-wrap">
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 flex-wrap">
             {TEMPLATES.map((t) => (
               <button
                 key={t.key}
@@ -2191,7 +2886,7 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
               </button>
             ))}
           </div>
-          <div className="flex items-center gap-1.5 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[10px] uppercase tracking-widest text-purple-400 font-bold mr-1">Animated</span>
             {ANIMATED_TEMPLATES.map((t) => (
               <button
@@ -2213,7 +2908,7 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
 
       {/* Effect picker (Admin only) */}
       {tab === "results" && !isViewer && (
-        <div className="flex items-center gap-1.5 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap mt-3 pt-3 border-t border-gray-800">
           <span className="text-[10px] uppercase tracking-widest text-cyan-400 font-bold mr-1">Effects</span>
           {VOTE_EFFECTS.map((e) => (
             <button
