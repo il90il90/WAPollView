@@ -369,10 +369,24 @@ module.exports = function (prisma) {
       const io = req.app.get("io");
       if (io) io.emit("polls_deleted", { timestamp: Date.now() });
 
-      const { getSock, initWhatsApp } = require("../whatsapp");
+      const { getSock } = require("../whatsapp");
       const sock = getSock();
       if (sock) {
-        console.log("[API] Sync: Reconnecting WhatsApp to trigger history re-sync...");
+        console.log("[API] Sync: Clearing sync state and reconnecting...");
+        const fs = require("fs");
+        const path = require("path");
+        const authDir = path.resolve(__dirname, "..", "..", "auth_info");
+        try {
+          const files = fs.readdirSync(authDir);
+          for (const file of files) {
+            if (file.startsWith("app-state-sync") || file.startsWith("sender-key")) {
+              fs.unlinkSync(path.join(authDir, file));
+            }
+          }
+          console.log("[API] Sync: Cleared sync state files");
+        } catch (e) {
+          console.error("[API] Sync: Error clearing sync state:", e.message);
+        }
         sock.end(new Error("Resync requested"));
       }
 
