@@ -294,19 +294,11 @@ module.exports = function (prisma) {
   router.get("/viewer-poll", async (req, res) => {
     try {
       const settings = await getViewerSettings();
-      let pollId = settings.pollId;
-      let template = settings.template;
-      let effect = settings.effect;
+      const pollId = settings.pollId;
+      const template = settings.template;
+      const effect = settings.effect;
 
       if (!pollId) {
-        const latestPoll = await prisma.poll.findFirst({
-          orderBy: { createdAt: "desc" },
-          include: { options: true, group: true },
-        });
-        if (latestPoll) {
-          pollId = latestPoll.id;
-          return res.json({ poll: latestPoll, group: latestPoll.group, template, effect });
-        }
         return res.json({ poll: null, group: null, template, effect });
       }
 
@@ -316,13 +308,6 @@ module.exports = function (prisma) {
       });
       if (!poll) {
         await saveViewerSettings(null, undefined, undefined);
-        const latestPoll = await prisma.poll.findFirst({
-          orderBy: { createdAt: "desc" },
-          include: { options: true, group: true },
-        });
-        if (latestPoll) {
-          return res.json({ poll: latestPoll, group: latestPoll.group, template, effect });
-        }
         return res.json({ poll: null, group: null, template, effect });
       }
       res.json({ poll, group: poll.group, template, effect });
