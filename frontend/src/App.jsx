@@ -44,18 +44,18 @@ export default function App() {
   const [isAdminConfigured, setIsAdminConfigured] = useState(null);
 
   useEffect(() => {
-    if (mode === "admin" && step === 1) {
+    if (mode === "admin") {
       fetch(`${API_BASE}/api/connection-status`)
         .then((r) => r.json())
         .then((data) => {
-          if (data.status === "connected") {
-            setWaStatus("connected");
+          setWaStatus(data.status);
+          if (data.status === "connected" && step === 1) {
             setStep(2);
           }
         })
         .catch(() => {});
     }
-  }, [mode]);
+  }, [mode, step]);
 
   useEffect(() => {
     if (!socket) return;
@@ -109,12 +109,20 @@ export default function App() {
   }, []);
 
   const handleBack = useCallback(() => {
-    setStep((s) => Math.max(1, s - 1));
-  }, []);
+    setStep((s) => {
+      const prev = Math.max(1, s - 1);
+      if (prev === 1 && waStatus === "connected") return 2;
+      return prev;
+    });
+  }, [waStatus]);
 
   const handleGoToStep = useCallback((s) => {
+    if (s === 1 && waStatus === "connected") {
+      setStep(2);
+      return;
+    }
     setStep(s);
-  }, []);
+  }, [waStatus]);
 
   const handleChangePassword = async (e) => {
     e.preventDefault();
