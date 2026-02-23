@@ -1880,11 +1880,7 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
       </div>
 
       {/* Stats */}
-      <div className={`grid gap-2 ${isMultiSelect ? "grid-cols-3" : "grid-cols-2"}`}>
-        <div className="card p-3 text-center">
-          <p className="text-2xl font-bold text-wa-green">{uniqueVoters}</p>
-          <p className="text-[10px] text-gray-500">Voters</p>
-        </div>
+      <div className={`grid gap-2 ${isMultiSelect ? "grid-cols-2" : "grid-cols-1"}`}>
         {isMultiSelect && (
           <div className="card p-3 text-center">
             <p className="text-2xl font-bold text-purple-400">{totalVotes}</p>
@@ -1937,7 +1933,7 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
       <div className="flex bg-gray-900 rounded-xl p-1 gap-1">
         {[
           { key: "results", label: "Results", icon: "📊" },
-          { key: "voters", label: `Voters (${allVoters.length})`, icon: "👥" },
+          { key: "voters", label: `Voters`, icon: "👥", badge: allVoters.length },
           { key: "activity", label: "Activity", icon: "⚡" },
         ].map((t) => (
           <button
@@ -1951,6 +1947,11 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
           >
             <span>{t.icon}</span>
             <span>{t.label}</span>
+            {t.badge != null && (
+              <span className={`min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-bold inline-flex items-center justify-center ${
+                tab === t.key ? "bg-wa-green/30 text-wa-green" : "bg-gray-700 text-gray-300"
+              }`}>{t.badge}</span>
+            )}
           </button>
         ))}
       </div>
