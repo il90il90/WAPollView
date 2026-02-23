@@ -313,13 +313,13 @@ export default function App() {
           <div className="flex items-center gap-3">
             <button
               onClick={() => { setShowDeletePolls(true); setDpPassword(""); setDpError(""); }}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gray-800/80 border border-gray-700 hover:border-orange-500/40 hover:bg-gray-800 text-gray-400 hover:text-orange-400 text-xs font-medium transition-all"
-              title="Delete All Polls"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gray-800/80 border border-gray-700 hover:border-blue-500/40 hover:bg-gray-800 text-gray-400 hover:text-blue-400 text-xs font-medium transition-all"
+              title="Sync Polls"
             >
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
-              <span className="hidden sm:inline">Delete Polls</span>
+              <span className="hidden sm:inline">Sync</span>
             </button>
             <button
               onClick={() => setShowWaLogout(true)}
@@ -428,23 +428,23 @@ export default function App() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="card p-6 md:p-8 w-full max-w-sm space-y-5 animate-slide-up">
             <div className="text-center space-y-2">
-              <div className="w-14 h-14 mx-auto rounded-2xl bg-orange-500/20 flex items-center justify-center">
-                <svg className="w-7 h-7 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              <div className="w-14 h-14 mx-auto rounded-2xl bg-blue-500/20 flex items-center justify-center">
+                <svg className="w-7 h-7 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
               </div>
-              <h2 className="text-lg font-bold">Delete All Polls</h2>
-              <p className="text-sm text-gray-400">This will permanently delete all polls, options, and vote history. This action cannot be undone.</p>
+              <h2 className="text-lg font-bold">Sync Polls</h2>
+              <p className="text-sm text-gray-400">This will delete all existing polls and re-sync them from WhatsApp. Votes and history will be refreshed.</p>
             </div>
 
             <form onSubmit={handleDeletePolls} className="space-y-3">
               <input type="password" placeholder="Enter admin password to confirm" value={dpPassword}
                 onChange={(e) => { setDpPassword(e.target.value); setDpError(""); }} autoFocus
-                className="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 text-sm text-center tracking-widest focus:outline-none focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/20 transition-all placeholder-gray-600" />
+                className="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 text-sm text-center tracking-widest focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder-gray-600" />
               {dpError && <p className="text-red-400 text-xs text-center">{dpError}</p>}
               <button type="submit" disabled={dpLoading || !dpPassword.trim()}
-                className="w-full bg-orange-500 hover:bg-orange-600 text-black font-bold py-3 rounded-xl text-sm disabled:opacity-40 transition-all">
-                {dpLoading ? "Deleting..." : "Delete All Polls"}
+                className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-40 transition-all">
+                {dpLoading ? "Syncing..." : "Sync All Polls"}
               </button>
             </form>
 

@@ -380,13 +380,21 @@ module.exports = function (prisma) {
       const deletedVotes = await prisma.voteLog.deleteMany({});
       const deletedOptions = await prisma.pollOption.deleteMany({});
       const deletedPolls = await prisma.poll.deleteMany({});
-      console.log(`[API] Deleted ${deletedPolls.count} polls, ${deletedOptions.count} options, ${deletedVotes.count} votes`);
+      console.log(`[API] Sync: Deleted ${deletedPolls.count} polls, ${deletedOptions.count} options, ${deletedVotes.count} votes`);
       const io = req.app.get("io");
       if (io) io.emit("polls_deleted", { timestamp: Date.now() });
+
+      const { getSock, initWhatsApp } = require("../whatsapp");
+      const sock = getSock();
+      if (sock) {
+        console.log("[API] Sync: Reconnecting WhatsApp to trigger history re-sync...");
+        sock.end(new Error("Resync requested"));
+      }
+
       res.json({ success: true, deleted: deletedPolls.count });
     } catch (err) {
       console.error("[API] /admin/delete-polls error:", err.message);
-      res.status(500).json({ success: false, error: "Failed to delete polls" });
+      res.status(500).json({ success: false, error: "Failed to sync polls" });
     }
   });
 
