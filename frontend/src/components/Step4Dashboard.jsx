@@ -1820,7 +1820,7 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
       </div>
 
       {/* Stats */}
-      <div className={`grid gap-2 ${isMultiSelect ? "grid-cols-4" : "grid-cols-3"}`}>
+      <div className={`grid gap-2 ${isMultiSelect ? "grid-cols-3" : "grid-cols-2"}`}>
         <div className="card p-3 text-center">
           <p className="text-2xl font-bold text-wa-green">{uniqueVoters}</p>
           <p className="text-[10px] text-gray-500">Voters</p>
@@ -1831,10 +1831,6 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
             <p className="text-[10px] text-gray-500">Selections</p>
           </div>
         )}
-        <div className="card p-3 text-center">
-          <p className="text-2xl font-bold text-blue-400">{votes.length}</p>
-          <p className="text-[10px] text-gray-500">Options</p>
-        </div>
         <div className="card p-3 text-center">
           <p className="text-sm font-bold text-amber-400 truncate">{leading.optionText}</p>
           <p className="text-[10px] text-gray-500">Leading ({leading.count})</p>
