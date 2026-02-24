@@ -3392,7 +3392,7 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
       {/* Winner celebration overlay */}
       {((isViewer && isPollLocked && declaredWinner) || (showWinnerOverlay && (diceWinner || declaredWinner))) && (
         <div
-          className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/90 backdrop-blur-md"
+          className="fixed inset-0 z-[9998] flex items-center justify-center bg-black backdrop-blur-md"
           onClick={isPollLocked ? undefined : () => {
             setShowWinnerOverlay(false);
             if (winnerFireworksRef.current) clearInterval(winnerFireworksRef.current);
@@ -3416,7 +3416,7 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
               ))}
             </div>
             {!isViewer && isPollLocked && (
-              <div className="flex items-center gap-3 mt-6" style={{ animation: "winnerFadeIn 0.8s ease-out 1.1s both" }}>
+              <div className="flex items-center gap-3 mt-6 opacity-0 hover:opacity-100 transition-all duration-300" style={{ animation: "winnerFadeIn 0.8s ease-out 1.1s both" }}>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
