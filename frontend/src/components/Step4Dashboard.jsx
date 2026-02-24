@@ -554,9 +554,9 @@ function TemplateClassic({ votes, chartData, totalVotes, COLORS: colors, uniqueV
                   <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: colors[idx % colors.length] }} />
                   <span className="text-sm font-medium truncate">{v.optionText}</span>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-sm font-bold" style={{ color: colors[idx % colors.length] }}>{v.count}</span>
-                  <span className="text-xs text-gray-500">({pct.toFixed(0)}%)</span>
+                <div className="flex items-center shrink-0" style={{ fontVariantNumeric: "tabular-nums" }}>
+                  <span className="text-sm font-bold text-right" style={{ color: colors[idx % colors.length], minWidth: 24, display: "inline-block" }}>{v.count}</span>
+                  <span className="text-xs text-gray-500 text-right" style={{ minWidth: 42, display: "inline-block" }}>({pct.toFixed(0)}%)</span>
                 </div>
               </div>
               <div className="w-full bg-gray-800 rounded-full h-3 overflow-hidden">
@@ -3400,13 +3400,13 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
           <div className="flex flex-col items-center gap-6 px-6" style={{ animation: "winnerScaleIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)" }}>
             <div className="text-8xl sm:text-9xl" style={{ animation: "winnerTrophyBounce 1s ease-in-out infinite" }}>🏆</div>
             <div className="text-center">
-              <p className="text-xl sm:text-2xl text-amber-400 font-bold tracking-widest uppercase mb-3" style={{ animation: "winnerFadeIn 0.8s ease-out 0.3s both" }}>Winner</p>
-              <p className="text-4xl sm:text-6xl font-black text-white drop-shadow-[0_0_40px_rgba(37,211,102,0.6)]" style={{ animation: "winnerFadeIn 0.8s ease-out 0.5s both" }}>{diceWinner || declaredWinner}</p>
-              {isPollLocked && (
-                <p className="text-sm text-gray-400 mt-4 tracking-wide" style={{ animation: "winnerFadeIn 0.8s ease-out 0.9s both" }}>
-                  {poll?.title}
+              {isPollLocked && poll?.title && (
+                <p className="text-sm text-gray-400 mb-2 tracking-wide" style={{ animation: "winnerFadeIn 0.8s ease-out 0.2s both" }}>
+                  {poll.title}
                 </p>
               )}
+              <p className="text-xl sm:text-2xl text-amber-400 font-bold tracking-widest uppercase mb-3" style={{ animation: "winnerFadeIn 0.8s ease-out 0.3s both" }}>Winner</p>
+              <p className="text-4xl sm:text-6xl font-black text-white drop-shadow-[0_0_40px_rgba(37,211,102,0.6)]" style={{ animation: "winnerFadeIn 0.8s ease-out 0.5s both" }}>{diceWinner || declaredWinner}</p>
             </div>
             <div className="flex gap-3 mt-2" style={{ animation: "winnerFadeIn 0.8s ease-out 0.7s both" }}>
               {["🎉", "⭐", "🎊", "✨", "🎆"].map((e, i) => (
