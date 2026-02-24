@@ -2937,7 +2937,7 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
         {[
           { key: "results", label: "Results", icon: "📊" },
           { key: "voters", label: `Voters`, icon: "👥", badge: allVoters.length },
-          { key: "activity", label: "Activity", icon: "⚡" },
+          { key: "activity", label: "Activity", icon: "⚡", badge: voteLog.length },
         ].map((t) => (
           <button
             key={t.key}
