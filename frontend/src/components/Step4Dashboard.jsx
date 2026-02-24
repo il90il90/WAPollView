@@ -3190,47 +3190,54 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
 
       {showPdfModal && (
         <div className="fixed inset-0 z-[10001] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={() => setShowPdfModal(false)}>
-          <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()} dir="rtl">
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="text-lg font-bold text-white">ייצוא PDF</h3>
-              <button onClick={() => setShowPdfModal(false)} className="text-gray-400 hover:text-white transition-colors text-xl leading-none">&times;</button>
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-md mx-4 shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="relative px-6 pt-5 pb-4">
+              <button onClick={() => setShowPdfModal(false)} className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-all text-lg leading-none">&times;</button>
+              <div className="text-center">
+                <div className="w-12 h-12 mx-auto rounded-xl bg-gray-800 flex items-center justify-center text-2xl mb-3">📄</div>
+                <h3 className="text-lg font-bold text-white">Export PDF</h3>
+                <p className="text-xs text-gray-500 mt-1">Choose a report type</p>
+              </div>
             </div>
-            <div className="space-y-3">
+            <div className="px-5 pb-5 space-y-2.5">
               <button
                 onClick={() => handleExportPDF("full")}
-                className="w-full flex items-center gap-4 p-4 rounded-xl bg-gray-800 hover:bg-gray-750 border border-gray-700 hover:border-wa-green/50 transition-all group text-right"
+                className="w-full flex items-center gap-4 px-4 py-3.5 rounded-xl bg-gray-800/60 hover:bg-gray-800 border border-gray-700/50 hover:border-wa-green/40 transition-all group"
               >
-                <div className="w-11 h-11 rounded-lg bg-wa-green/15 flex items-center justify-center text-xl shrink-0 group-hover:bg-wa-green/25 transition-colors">
+                <div className="w-10 h-10 rounded-lg bg-wa-green/15 flex items-center justify-center text-lg shrink-0 group-hover:bg-wa-green/25 transition-colors">
                   📋
                 </div>
-                <div>
-                  <p className="text-sm font-bold text-white group-hover:text-wa-green transition-colors">דוח מלא</p>
-                  <p className="text-xs text-gray-400 mt-0.5">גרף, טבלת מצביעים ולוג פעילות</p>
+                <div className="text-left flex-1">
+                  <p className="text-sm font-bold text-white group-hover:text-wa-green transition-colors">Full Report</p>
+                  <p className="text-[11px] text-gray-500 mt-0.5">Chart, voters table & activity log</p>
                 </div>
+                <svg className="w-4 h-4 text-gray-600 group-hover:text-wa-green transition-colors shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
               </button>
               <button
                 onClick={() => handleExportPDF("results")}
-                className="w-full flex items-center gap-4 p-4 rounded-xl bg-gray-800 hover:bg-gray-750 border border-gray-700 hover:border-blue-500/50 transition-all group text-right"
+                className="w-full flex items-center gap-4 px-4 py-3.5 rounded-xl bg-gray-800/60 hover:bg-gray-800 border border-gray-700/50 hover:border-blue-500/40 transition-all group"
               >
-                <div className="w-11 h-11 rounded-lg bg-blue-500/15 flex items-center justify-center text-xl shrink-0 group-hover:bg-blue-500/25 transition-colors">
+                <div className="w-10 h-10 rounded-lg bg-blue-500/15 flex items-center justify-center text-lg shrink-0 group-hover:bg-blue-500/25 transition-colors">
                   📊
                 </div>
-                <div>
-                  <p className="text-sm font-bold text-white group-hover:text-blue-400 transition-colors">תוצאות הסקר</p>
-                  <p className="text-xs text-gray-400 mt-0.5">סיכום וגרף בלבד</p>
+                <div className="text-left flex-1">
+                  <p className="text-sm font-bold text-white group-hover:text-blue-400 transition-colors">Poll Results</p>
+                  <p className="text-[11px] text-gray-500 mt-0.5">Summary & chart only</p>
                 </div>
+                <svg className="w-4 h-4 text-gray-600 group-hover:text-blue-400 transition-colors shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
               </button>
               <button
                 onClick={() => handleExportPDF("table")}
-                className="w-full flex items-center gap-4 p-4 rounded-xl bg-gray-800 hover:bg-gray-750 border border-gray-700 hover:border-amber-500/50 transition-all group text-right"
+                className="w-full flex items-center gap-4 px-4 py-3.5 rounded-xl bg-gray-800/60 hover:bg-gray-800 border border-gray-700/50 hover:border-amber-500/40 transition-all group"
               >
-                <div className="w-11 h-11 rounded-lg bg-amber-500/15 flex items-center justify-center text-xl shrink-0 group-hover:bg-amber-500/25 transition-colors">
+                <div className="w-10 h-10 rounded-lg bg-amber-500/15 flex items-center justify-center text-lg shrink-0 group-hover:bg-amber-500/25 transition-colors">
                   👥
                 </div>
-                <div>
-                  <p className="text-sm font-bold text-white group-hover:text-amber-400 transition-colors">טבלת מצביעים</p>
-                  <p className="text-xs text-gray-400 mt-0.5">רשימת שמות, טלפונים ובחירות</p>
+                <div className="text-left flex-1">
+                  <p className="text-sm font-bold text-white group-hover:text-amber-400 transition-colors">Voters Table</p>
+                  <p className="text-[11px] text-gray-500 mt-0.5">Names, phone numbers & choices</p>
                 </div>
+                <svg className="w-4 h-4 text-gray-600 group-hover:text-amber-400 transition-colors shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
               </button>
             </div>
           </div>
