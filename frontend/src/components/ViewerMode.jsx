@@ -11,6 +11,7 @@ export default function ViewerMode({ socket, isConnected, onBack, onAdminClick }
   const [template, setTemplate] = useState("classic");
   const [effect, setEffect] = useState("confetti");
   const [profileImage, setProfileImage] = useState(null);
+  const [displayName, setDisplayName] = useState(null);
 
   const fetchViewerPoll = useCallback(async () => {
     try {
@@ -20,6 +21,7 @@ export default function ViewerMode({ socket, isConnected, onBack, onAdminClick }
       if (data.template) setTemplate(data.template);
       if (data.effect) setEffect(data.effect);
       if (data.profileImage !== undefined) setProfileImage(data.profileImage);
+      if (data.displayName !== undefined) setDisplayName(data.displayName);
       if (data.poll) {
         setPoll(data.poll);
         setGroup(data.group);
@@ -58,17 +60,22 @@ export default function ViewerMode({ socket, isConnected, onBack, onAdminClick }
     const handleProfileImageChange = (data) => {
       setProfileImage(data?.profileImage || null);
     };
+    const handleDisplayNameChange = (data) => {
+      setDisplayName(data?.displayName || null);
+    };
     socket.on("connect", handleReconnect);
     socket.on("viewer_poll_changed", handleChange);
     socket.on("viewer_template_changed", handleTemplateChange);
     socket.on("viewer_effect_changed", handleEffectChange);
     socket.on("viewer_profile_image_changed", handleProfileImageChange);
+    socket.on("viewer_display_name_changed", handleDisplayNameChange);
     return () => {
       socket.off("connect", handleReconnect);
       socket.off("viewer_poll_changed", handleChange);
       socket.off("viewer_template_changed", handleTemplateChange);
       socket.off("viewer_effect_changed", handleEffectChange);
       socket.off("viewer_profile_image_changed", handleProfileImageChange);
+      socket.off("viewer_display_name_changed", handleDisplayNameChange);
     };
   }, [socket, fetchViewerPoll]);
 
@@ -174,6 +181,7 @@ export default function ViewerMode({ socket, isConnected, onBack, onAdminClick }
           viewerTemplate={template}
           viewerEffect={effect}
           viewerProfileImage={profileImage}
+          viewerDisplayName={displayName}
         />
       </main>
     </div>

@@ -2072,7 +2072,7 @@ function renderTemplate(templateKey, props) {
   }
 }
 
-export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, viewerTemplate, viewerEffect, viewerProfileImage }) {
+export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, viewerTemplate, viewerEffect, viewerProfileImage, viewerDisplayName }) {
   const [votes, setVotes] = useState([]);
   const [totalVotes, setTotalVotes] = useState(0);
   const [uniqueVoters, setUniqueVoters] = useState(0);
@@ -2084,6 +2084,10 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
   const [profileImage, setProfileImage] = useState(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const profileInputRef = useRef(null);
+  const [displayName, setDisplayName] = useState(null);
+  const [editingName, setEditingName] = useState(false);
+  const [editNameValue, setEditNameValue] = useState("");
+  const nameInputRef = useRef(null);
   const [template, setTemplate] = useState(() => localStorage.getItem("pollTemplate") || "classic");
   const [effect, setEffect] = useState(() => localStorage.getItem("pollEffect") || "confetti");
   const [showPdfModal, setShowPdfModal] = useState(false);
@@ -2478,13 +2482,17 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
   useEffect(() => {
     if (isViewer) {
       setProfileImage(viewerProfileImage || null);
+      setDisplayName(viewerDisplayName || null);
       return;
     }
     fetch(`${API_BASE}/api/viewer-poll`)
       .then((r) => r.json())
-      .then((data) => { if (data.profileImage) setProfileImage(data.profileImage); })
+      .then((data) => {
+        if (data.profileImage) setProfileImage(data.profileImage);
+        if (data.displayName !== undefined) setDisplayName(data.displayName);
+      })
       .catch(() => {});
-  }, [isViewer, viewerProfileImage]);
+  }, [isViewer, viewerProfileImage, viewerDisplayName]);
 
   const handleProfileImageUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -2516,6 +2524,27 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
       const data = await res.json();
       if (data.success) setProfileImage(null);
     } catch {}
+  };
+
+  const handleStartEditName = () => {
+    setEditNameValue(displayName || group?.name || "");
+    setEditingName(true);
+    setTimeout(() => nameInputRef.current?.select(), 50);
+  };
+
+  const handleSaveName = async () => {
+    const newName = editNameValue.trim();
+    if (!newName) { setEditingName(false); return; }
+    try {
+      const res = await fetch(`${API_BASE}/api/viewer-display-name`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newName }),
+      });
+      const data = await res.json();
+      if (data.success) setDisplayName(newName);
+    } catch {}
+    setEditingName(false);
   };
 
   useEffect(() => {
@@ -2804,7 +2833,30 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
           )}
           <div className="min-w-0">
             <h2 className="text-lg font-bold truncate">{poll?.title}</h2>
-            <p className="text-gray-400 text-xs truncate">{group?.name}</p>
+            {!isViewer && editingName ? (
+              <input
+                ref={nameInputRef}
+                value={editNameValue}
+                onChange={(e) => setEditNameValue(e.target.value)}
+                onBlur={handleSaveName}
+                onKeyDown={(e) => { if (e.key === "Enter") handleSaveName(); if (e.key === "Escape") setEditingName(false); }}
+                className="bg-gray-800 border border-gray-600 rounded px-1.5 py-0.5 text-xs text-gray-300 w-full max-w-[200px] outline-none focus:border-wa-green"
+                autoFocus
+              />
+            ) : (
+              <p
+                className={`text-gray-400 text-xs truncate ${!isViewer ? "cursor-pointer hover:text-gray-200 transition-colors" : ""}`}
+                onClick={!isViewer ? handleStartEditName : undefined}
+                title={!isViewer ? "Click to edit display name" : undefined}
+              >
+                {displayName || group?.name}
+                {!isViewer && (
+                  <svg className="w-2.5 h-2.5 inline-block ml-1 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                )}
+              </p>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap shrink-0">

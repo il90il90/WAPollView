@@ -262,14 +262,16 @@ module.exports = function (prisma) {
       const templateSetting = await prisma.appSettings.findUnique({ where: { key: "viewer_template" } });
       const effectSetting = await prisma.appSettings.findUnique({ where: { key: "viewer_effect" } });
       const profileImageSetting = await prisma.appSettings.findUnique({ where: { key: "viewer_profile_image" } });
+      const displayNameSetting = await prisma.appSettings.findUnique({ where: { key: "viewer_display_name" } });
       return {
         pollId: pollSetting?.value || null,
         template: templateSetting?.value || "classic",
         effect: effectSetting?.value || "confetti",
         profileImage: profileImageSetting?.value || null,
+        displayName: displayNameSetting?.value || null,
       };
     } catch {
-      return { pollId: null, template: "classic", effect: "confetti", profileImage: null };
+      return { pollId: null, template: "classic", effect: "confetti", profileImage: null, displayName: null };
     }
   }
 
@@ -296,10 +298,10 @@ module.exports = function (prisma) {
   router.get("/viewer-poll", async (req, res) => {
     try {
       const settings = await getViewerSettings();
-      const { pollId, template, effect, profileImage } = settings;
+      const { pollId, template, effect, profileImage, displayName } = settings;
 
       if (!pollId) {
-        return res.json({ poll: null, group: null, template, effect, profileImage });
+        return res.json({ poll: null, group: null, template, effect, profileImage, displayName });
       }
 
       const poll = await prisma.poll.findUnique({
@@ -308,9 +310,9 @@ module.exports = function (prisma) {
       });
       if (!poll) {
         await saveViewerSettings(null, undefined, undefined);
-        return res.json({ poll: null, group: null, template, effect, profileImage });
+        return res.json({ poll: null, group: null, template, effect, profileImage, displayName });
       }
-      res.json({ poll, group: poll.group, template, effect, profileImage });
+      res.json({ poll, group: poll.group, template, effect, profileImage, displayName });
     } catch (err) {
       console.error("[API] /viewer-poll error:", err.message);
       res.status(500).json({ error: "Failed to fetch viewer poll" });
@@ -381,6 +383,25 @@ module.exports = function (prisma) {
     } catch (err) {
       console.error("[API] DELETE /viewer-profile-image error:", err.message);
       res.status(500).json({ error: "Failed to delete profile image" });
+    }
+  });
+
+  router.post("/viewer-display-name", async (req, res) => {
+    const { name } = req.body;
+    if (!name || !name.trim()) return res.status(400).json({ error: "name required" });
+    try {
+      await prisma.appSettings.upsert({
+        where: { key: "viewer_display_name" },
+        update: { value: name.trim() },
+        create: { id: "viewer_display_name", key: "viewer_display_name", value: name.trim() },
+      });
+      console.log(`[API] Viewer display name set to: ${name.trim()}`);
+      const io = req.app.get("io");
+      if (io) io.emit("viewer_display_name_changed", { displayName: name.trim() });
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[API] /viewer-display-name error:", err.message);
+      res.status(500).json({ error: "Failed to save display name" });
     }
   });
 
