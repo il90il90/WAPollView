@@ -2072,7 +2072,7 @@ function renderTemplate(templateKey, props) {
   }
 }
 
-export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, viewerTemplate, viewerEffect }) {
+export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, viewerTemplate, viewerEffect, viewerProfileImage }) {
   const [votes, setVotes] = useState([]);
   const [totalVotes, setTotalVotes] = useState(0);
   const [uniqueVoters, setUniqueVoters] = useState(0);
@@ -2081,6 +2081,9 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
   const [tab, setTab] = useState("results");
   const [isSharedToViewer, setIsSharedToViewer] = useState(false);
   const [voteSplashes, setVoteSplashes] = useState([]);
+  const [profileImage, setProfileImage] = useState(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const profileInputRef = useRef(null);
   const [template, setTemplate] = useState(() => localStorage.getItem("pollTemplate") || "classic");
   const [effect, setEffect] = useState(() => localStorage.getItem("pollEffect") || "confetti");
   const [showPdfModal, setShowPdfModal] = useState(false);
@@ -2473,6 +2476,49 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
   };
 
   useEffect(() => {
+    if (isViewer) {
+      setProfileImage(viewerProfileImage || null);
+      return;
+    }
+    fetch(`${API_BASE}/api/viewer-poll`)
+      .then((r) => r.json())
+      .then((data) => { if (data.profileImage) setProfileImage(data.profileImage); })
+      .catch(() => {});
+  }, [isViewer, viewerProfileImage]);
+
+  const handleProfileImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingImage(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (ev) => {
+        const base64 = ev.target.result;
+        const res = await fetch(`${API_BASE}/api/viewer-profile-image`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image: base64 }),
+        });
+        const data = await res.json();
+        if (data.success) setProfileImage(base64);
+        setUploadingImage(false);
+      };
+      reader.readAsDataURL(file);
+    } catch {
+      setUploadingImage(false);
+    }
+    if (profileInputRef.current) profileInputRef.current.value = "";
+  };
+
+  const handleRemoveProfileImage = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/viewer-profile-image`, { method: "DELETE" });
+      const data = await res.json();
+      if (data.success) setProfileImage(null);
+    } catch {}
+  };
+
+  useEffect(() => {
     if (isViewer) return;
     fetch(`${API_BASE}/api/viewer-poll`)
       .then((r) => r.json())
@@ -2709,6 +2755,52 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
             </button>
+          )}
+          {(profileImage || !isViewer) && (
+            <div className="relative shrink-0 group/pic">
+              {profileImage ? (
+                <img
+                  src={profileImage}
+                  alt={group?.name || "Group"}
+                  className="w-10 h-10 rounded-full object-cover ring-2 ring-gray-700"
+                />
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-wa-green/30 to-blue-500/30 flex items-center justify-center ring-2 ring-gray-700">
+                  <span className="text-sm font-bold text-gray-300">
+                    {(group?.name || "?").charAt(0).toUpperCase()}
+                  </span>
+                </div>
+              )}
+              {!isViewer && (
+                <>
+                  <input ref={profileInputRef} type="file" accept="image/*" className="hidden" onChange={handleProfileImageUpload} />
+                  <button
+                    onClick={() => profileInputRef.current?.click()}
+                    className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover/pic:opacity-100 transition-opacity flex items-center justify-center"
+                    title={profileImage ? "Change image" : "Upload image"}
+                    disabled={uploadingImage}
+                  >
+                    {uploadingImage ? (
+                      <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                    )}
+                  </button>
+                  {profileImage && (
+                    <button
+                      onClick={handleRemoveProfileImage}
+                      className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover/pic:opacity-100 transition-opacity text-[10px] font-bold hover:bg-red-400"
+                      title="Remove image"
+                    >
+                      ×
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
           )}
           <div className="min-w-0">
             <h2 className="text-lg font-bold truncate">{poll?.title}</h2>

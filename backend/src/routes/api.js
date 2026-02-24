@@ -261,13 +261,15 @@ module.exports = function (prisma) {
       const pollSetting = await prisma.appSettings.findUnique({ where: { key: "viewer_poll_id" } });
       const templateSetting = await prisma.appSettings.findUnique({ where: { key: "viewer_template" } });
       const effectSetting = await prisma.appSettings.findUnique({ where: { key: "viewer_effect" } });
+      const profileImageSetting = await prisma.appSettings.findUnique({ where: { key: "viewer_profile_image" } });
       return {
         pollId: pollSetting?.value || null,
         template: templateSetting?.value || "classic",
         effect: effectSetting?.value || "confetti",
+        profileImage: profileImageSetting?.value || null,
       };
     } catch {
-      return { pollId: null, template: "classic", effect: "confetti" };
+      return { pollId: null, template: "classic", effect: "confetti", profileImage: null };
     }
   }
 
@@ -294,12 +296,10 @@ module.exports = function (prisma) {
   router.get("/viewer-poll", async (req, res) => {
     try {
       const settings = await getViewerSettings();
-      const pollId = settings.pollId;
-      const template = settings.template;
-      const effect = settings.effect;
+      const { pollId, template, effect, profileImage } = settings;
 
       if (!pollId) {
-        return res.json({ poll: null, group: null, template, effect });
+        return res.json({ poll: null, group: null, template, effect, profileImage });
       }
 
       const poll = await prisma.poll.findUnique({
@@ -308,9 +308,9 @@ module.exports = function (prisma) {
       });
       if (!poll) {
         await saveViewerSettings(null, undefined, undefined);
-        return res.json({ poll: null, group: null, template, effect });
+        return res.json({ poll: null, group: null, template, effect, profileImage });
       }
-      res.json({ poll, group: poll.group, template, effect });
+      res.json({ poll, group: poll.group, template, effect, profileImage });
     } catch (err) {
       console.error("[API] /viewer-poll error:", err.message);
       res.status(500).json({ error: "Failed to fetch viewer poll" });
@@ -350,6 +350,38 @@ module.exports = function (prisma) {
       io.emit("viewer_effect_changed", { effect });
     }
     res.json({ success: true, effect });
+  });
+
+  router.post("/viewer-profile-image", async (req, res) => {
+    const { image } = req.body;
+    if (!image) return res.status(400).json({ error: "image required" });
+    try {
+      await prisma.appSettings.upsert({
+        where: { key: "viewer_profile_image" },
+        update: { value: image },
+        create: { id: "viewer_profile_image", key: "viewer_profile_image", value: image },
+      });
+      console.log("[API] Viewer profile image updated");
+      const io = req.app.get("io");
+      if (io) io.emit("viewer_profile_image_changed", { profileImage: image });
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[API] /viewer-profile-image error:", err.message);
+      res.status(500).json({ error: "Failed to save profile image" });
+    }
+  });
+
+  router.delete("/viewer-profile-image", async (req, res) => {
+    try {
+      await prisma.appSettings.deleteMany({ where: { key: "viewer_profile_image" } });
+      console.log("[API] Viewer profile image removed");
+      const io = req.app.get("io");
+      if (io) io.emit("viewer_profile_image_changed", { profileImage: null });
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[API] DELETE /viewer-profile-image error:", err.message);
+      res.status(500).json({ error: "Failed to delete profile image" });
+    }
   });
 
   router.post("/viewer-dice-roll", (req, res) => {
@@ -494,6 +526,38 @@ module.exports = function (prisma) {
     } catch (err) {
       console.error("[API] sync error:", err.message);
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.get("/groups/:groupId/profile-pic", async (req, res) => {
+    try {
+      const group = await prisma.group.findUnique({ where: { id: req.params.groupId } });
+      if (!group) return res.status(404).json({ error: "Group not found" });
+
+      const { getSock } = require("../whatsapp");
+      const sock = getSock();
+      if (sock) {
+        for (const type of ["image", "preview"]) {
+          try {
+            const url = await sock.profilePictureUrl(group.jid, type);
+            if (url) {
+              console.log(`[API] Profile pic found for ${group.name} (${type}): ${url.substring(0, 80)}...`);
+              await prisma.group.update({ where: { id: group.id }, data: { profilePicUrl: url } });
+              return res.json({ url });
+            }
+          } catch (e) {
+            console.log(`[API] Profile pic ${type} failed for ${group.name}: ${e.message || e}`);
+          }
+        }
+      }
+
+      if (group.profilePicUrl) {
+        return res.json({ url: group.profilePicUrl });
+      }
+      res.json({ url: null });
+    } catch (err) {
+      console.error("[API] /groups/:groupId/profile-pic error:", err.message);
+      res.status(500).json({ error: "Failed to fetch profile picture" });
     }
   });
 
