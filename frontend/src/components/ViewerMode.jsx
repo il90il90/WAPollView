@@ -93,7 +93,7 @@ export default function ViewerMode({ socket, isConnected, onBack, onAdminClick }
       <div className="h-screen w-screen overflow-hidden relative flex flex-col items-center justify-center">
         <button
           onClick={onAdminClick || onBack}
-          className="fixed top-3 right-3 z-50 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-900/70 backdrop-blur-sm border border-gray-700/50 hover:border-wa-green/40 hover:bg-gray-900/90 text-gray-500 hover:text-wa-green text-xs font-medium transition-all opacity-0 hover:opacity-100"
+          className="fixed top-3 right-3 z-50 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-900/70 backdrop-blur-sm border border-gray-700/50 hover:border-wa-green/40 hover:bg-gray-900/90 text-gray-500 hover:text-wa-green text-xs font-medium transition-all opacity-30 hover:opacity-100"
         >
           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -128,7 +128,7 @@ export default function ViewerMode({ socket, isConnected, onBack, onAdminClick }
     <div className="h-screen w-screen overflow-hidden relative">
       <button
         onClick={onAdminClick || onBack}
-        className="fixed top-3 right-3 z-50 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-900/70 backdrop-blur-sm border border-gray-700/50 hover:border-wa-green/40 hover:bg-gray-900/90 text-gray-500 hover:text-wa-green text-xs font-medium transition-all opacity-0 hover:opacity-100"
+        className="fixed top-3 right-3 z-50 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-900/70 backdrop-blur-sm border border-gray-700/50 hover:border-wa-green/40 hover:bg-gray-900/90 text-gray-500 hover:text-wa-green text-xs font-medium transition-all opacity-30 hover:opacity-100"
       >
         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
