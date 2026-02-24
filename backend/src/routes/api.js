@@ -388,16 +388,16 @@ module.exports = function (prisma) {
 
   router.post("/viewer-display-name", async (req, res) => {
     const { name } = req.body;
-    if (!name || !name.trim()) return res.status(400).json({ error: "name required" });
+    const trimmed = (name ?? "").trim();
     try {
       await prisma.appSettings.upsert({
         where: { key: "viewer_display_name" },
-        update: { value: name.trim() },
-        create: { id: "viewer_display_name", key: "viewer_display_name", value: name.trim() },
+        update: { value: trimmed },
+        create: { id: "viewer_display_name", key: "viewer_display_name", value: trimmed },
       });
-      console.log(`[API] Viewer display name set to: ${name.trim()}`);
+      console.log(`[API] Viewer display name set to: "${trimmed}"`);
       const io = req.app.get("io");
-      if (io) io.emit("viewer_display_name_changed", { displayName: name.trim() });
+      if (io) io.emit("viewer_display_name_changed", { displayName: trimmed });
       res.json({ success: true });
     } catch (err) {
       console.error("[API] /viewer-display-name error:", err.message);
