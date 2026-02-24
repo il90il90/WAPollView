@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
   PieChart, Pie, RadialBarChart, RadialBar, Legend,
@@ -3389,15 +3390,15 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
         </div>
       )}
 
-      {/* Winner celebration overlay */}
-      {((isViewer && isPollLocked && declaredWinner) || (showWinnerOverlay && (diceWinner || declaredWinner))) && (
+      {/* Winner celebration overlay - rendered via portal to escape parent stacking contexts */}
+      {((isViewer && isPollLocked && declaredWinner) || (showWinnerOverlay && (diceWinner || declaredWinner))) && createPortal(
         <div
-          className="fixed inset-0 z-[9998] flex items-center justify-center bg-black backdrop-blur-md"
+          className="fixed inset-0 z-[10002] flex items-center justify-center bg-black min-h-[100dvh]"
+          style={{ animation: "winnerFadeIn 0.5s ease-out" }}
           onClick={isPollLocked ? undefined : () => {
             setShowWinnerOverlay(false);
             if (winnerFireworksRef.current) clearInterval(winnerFireworksRef.current);
           }}
-          style={{ animation: "winnerFadeIn 0.5s ease-out" }}
         >
           <div className="flex flex-col items-center gap-6 px-6" style={{ animation: "winnerScaleIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)" }}>
             <div className="text-8xl sm:text-9xl" style={{ animation: "winnerTrophyBounce 1s ease-in-out infinite" }}>🏆</div>
@@ -3463,7 +3464,8 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
               to { transform: translateY(-10px) scale(1.2); }
             }
           `}</style>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
