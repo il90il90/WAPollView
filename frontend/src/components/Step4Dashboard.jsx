@@ -2078,6 +2078,8 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
   const [uniqueVoters, setUniqueVoters] = useState(0);
   const [lastUpdate, setLastUpdate] = useState(null);
   const [voteLog, setVoteLog] = useState([]);
+  const [fraudAlerts, setFraudAlerts] = useState([]);
+  const [fraudDetail, setFraudDetail] = useState(null);
   const [tab, setTab] = useState("results");
   const [isSharedToViewer, setIsSharedToViewer] = useState(false);
   const [voteSplashes, setVoteSplashes] = useState([]);
@@ -2091,6 +2093,12 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
   const [template, setTemplate] = useState(() => localStorage.getItem("pollTemplate") || "classic");
   const [effect, setEffect] = useState(() => localStorage.getItem("pollEffect") || "confetti");
   const [showPdfModal, setShowPdfModal] = useState(false);
+  const [webVotingEnabled, setWebVotingEnabled] = useState(false);
+  const [webVotingGroupJid, setWebVotingGroupJid] = useState(null);
+  const [webVotingGroupName, setWebVotingGroupName] = useState(null);
+  const [allGroups, setAllGroups] = useState([]);
+  const [showWebVotingSettings, setShowWebVotingSettings] = useState(false);
+  const [webVotingLoading, setWebVotingLoading] = useState(false);
   const [diceRolling, setDiceRolling] = useState(false);
   const [diceWinner, setDiceWinner] = useState(null);
   const [diceCurrentOption, setDiceCurrentOption] = useState(null);
@@ -2106,6 +2114,10 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
   const winnerOverlayTimerRef = useRef(null);
   const winnerFireworksRef = useRef(null);
   const prevTotalRef = useRef(0);
+  const [webSessions, setWebSessions] = useState([]);
+  const [sessionDetail, setSessionDetail] = useState(null);
+  const [disconnecting, setDisconnecting] = useState(null);
+  const [showUsersPanel, setShowUsersPanel] = useState(false);
   const refreshTimerRef = useRef(null);
   const splashIdRef = useRef(0);
   const chartRef = useRef(null);
@@ -2576,12 +2588,14 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
   const fetchData = useCallback(async () => {
     if (!poll?.id) return;
     try {
-      const [votesRes, logRes] = await Promise.all([
+      const fetches = [
         fetch(`${API_BASE}/api/polls/${poll.id}/votes`),
         fetch(`${API_BASE}/api/polls/${poll.id}/vote-log`),
-      ]);
-      const votesData = await votesRes.json();
-      const logData = await logRes.json();
+      ];
+      if (!isViewer) fetches.push(fetch(`${API_BASE}/api/fraud-logs`));
+      const responses = await Promise.all(fetches);
+      const votesData = await responses[0].json();
+      const logData = await responses[1].json();
       const optionsArr = votesData.options || votesData;
       const newTotal = optionsArr.reduce((sum, v) => sum + v.count, 0);
       prevTotalRef.current = newTotal;
@@ -2590,11 +2604,22 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
       setTotalVotes(newTotal);
       setUniqueVoters(votesData.uniqueVoters ?? newTotal);
       setVoteLog(logData);
+      if (!isViewer && responses[2]) {
+        const fraudData = await responses[2].json();
+        if (Array.isArray(fraudData)) setFraudAlerts(fraudData);
+      }
+      if (!isViewer) {
+        try {
+          const sessRes = await fetch(`${API_BASE}/api/web-sessions`);
+          const sessData = await sessRes.json();
+          if (Array.isArray(sessData)) setWebSessions(sessData);
+        } catch (_) {}
+      }
       setLastUpdate(new Date());
     } catch (err) {
       console.error("Failed to fetch poll data:", err);
     }
-  }, [poll?.id]);
+  }, [poll?.id, isViewer]);
 
   useEffect(() => {
     fetchData();
@@ -2647,12 +2672,19 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
         if (winnerFireworksRef.current) clearInterval(winnerFireworksRef.current);
       }
     };
+    const handleFraudAlert = (data) => {
+      setFraudAlerts((prev) => {
+        if (data.id && prev.some((a) => a.id === data.id)) return prev;
+        return [data, ...prev];
+      });
+    };
     socket.on("connect", handleReconnect);
     socket.on("poll_vote_received", handleVote);
     socket.on("poll_data_changed", handleChanged);
     socket.on("history_sync_complete", handleHistorySync);
     socket.on("poll_locked", handlePollLocked);
     socket.on("poll_reopened", handlePollReopened);
+    socket.on("fraud_alert", handleFraudAlert);
 
     return () => {
       socket.off("connect", handleReconnect);
@@ -2661,6 +2693,7 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
       socket.off("history_sync_complete", handleHistorySync);
       socket.off("poll_locked", handlePollLocked);
       socket.off("poll_reopened", handlePollReopened);
+      socket.off("fraud_alert", handleFraudAlert);
       socket.emit("unsubscribe_from_poll", { pollId: poll.id });
     };
   }, [socket, poll?.id, fetchData, showVoteToast]);
@@ -2692,6 +2725,61 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
       socket.off("viewer_dice_roll", handleDiceRoll);
     };
   }, [socket, diceRolling]);
+
+  useEffect(() => {
+    if (isViewer) return;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/web-vote/settings`);
+        const data = await res.json();
+        setWebVotingEnabled(data.enabled || false);
+        setWebVotingGroupJid(data.groupJid || null);
+        setWebVotingGroupName(data.groupName || null);
+      } catch {}
+    })();
+  }, [isViewer]);
+
+  const handleWebVotingToggle = async (enabled) => {
+    setWebVotingLoading(true);
+    try {
+      await fetch(`${API_BASE}/api/web-vote/settings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      });
+      setWebVotingEnabled(enabled);
+    } catch (err) {
+      console.error("Failed to update web voting:", err);
+    } finally {
+      setWebVotingLoading(false);
+    }
+  };
+
+  const handleWebVotingGroupChange = async (groupJid) => {
+    setWebVotingLoading(true);
+    try {
+      await fetch(`${API_BASE}/api/web-vote/settings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ groupJid }),
+      });
+      setWebVotingGroupJid(groupJid);
+      const g = allGroups.find((gr) => gr.jid === groupJid);
+      setWebVotingGroupName(g?.name || null);
+    } catch (err) {
+      console.error("Failed to update web voting group:", err);
+    } finally {
+      setWebVotingLoading(false);
+    }
+  };
+
+  const fetchGroupsForWebVoting = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/groups`);
+      const data = await res.json();
+      setAllGroups(data);
+    } catch {}
+  };
 
   const chartData = votes.map((v) => ({
     name: v.optionText.length > 12 ? v.optionText.substring(0, 12) + "..." : v.optionText,
@@ -2988,7 +3076,7 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
         {[
           { key: "results", label: "Results", icon: "📊" },
           { key: "voters", label: `Voters`, icon: "👥", badge: allVoters.length },
-          { key: "activity", label: "Activity", icon: "⚡", badge: voteLog.length },
+          { key: "activity", label: "Activity", icon: "⚡", badge: voteLog.length + fraudAlerts.length, alert: fraudAlerts.length > 0 },
         ].map((t) => (
           <button
             key={t.key}
@@ -3003,7 +3091,7 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
             <span>{t.label}</span>
             {t.badge != null && (
               <span className={`min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-bold inline-flex items-center justify-center ${
-                tab === t.key ? "bg-wa-green/30 text-wa-green" : "bg-gray-700 text-gray-300"
+                t.alert ? "bg-red-500/30 text-red-400 animate-pulse" : tab === t.key ? "bg-wa-green/30 text-wa-green" : "bg-gray-700 text-gray-300"
               }`}>{t.badge}</span>
             )}
           </button>
@@ -3067,6 +3155,89 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
               <span>{e.label}</span>
             </button>
           ))}
+        </div>
+      )}
+
+      {/* Web Voting Settings (Admin only) */}
+      {tab === "results" && !isViewer && (
+        <div className="mt-3 pt-3 border-t border-gray-800">
+          <button
+            onClick={() => { setShowWebVotingSettings(!showWebVotingSettings); if (!showWebVotingSettings) fetchGroupsForWebVoting(); }}
+            className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-orange-400 hover:text-orange-300 transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+            </svg>
+            Web Voting
+            <span className={`w-2 h-2 rounded-full ${webVotingEnabled ? "bg-green-400 animate-pulse" : "bg-gray-600"}`} />
+            <svg className={`w-3 h-3 transition-transform ${showWebVotingSettings ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {showWebVotingSettings && (
+            <div className="mt-3 p-4 rounded-xl bg-gray-800/50 border border-gray-700 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-200">Allow Web Voting</p>
+                  <p className="text-[11px] text-gray-500">Viewers can vote directly from their browser</p>
+                </div>
+                <button
+                  onClick={() => handleWebVotingToggle(!webVotingEnabled)}
+                  disabled={webVotingLoading}
+                  className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${webVotingEnabled ? "bg-green-500" : "bg-gray-600"} ${webVotingLoading ? "opacity-50" : ""}`}
+                >
+                  <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${webVotingEnabled ? "translate-x-5" : "translate-x-0"}`} />
+                </button>
+              </div>
+              {webVotingEnabled && (
+                <div className="space-y-2">
+                  <label className="text-xs text-gray-400 font-medium">Verification Group</label>
+                  <p className="text-[11px] text-gray-500">Users must be members of this group to vote</p>
+                  <select
+                    value={webVotingGroupJid || ""}
+                    onChange={(e) => handleWebVotingGroupChange(e.target.value || null)}
+                    disabled={webVotingLoading}
+                    className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/20 transition-all"
+                  >
+                    <option value="">Select a group...</option>
+                    {allGroups.map((g) => (
+                      <option key={g.jid} value={g.jid}>{g.name}</option>
+                    ))}
+                  </select>
+                  {webVotingGroupJid && webVotingGroupName && (
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-orange-500/10 border border-orange-500/20">
+                      <span className="w-2 h-2 rounded-full bg-orange-400" />
+                      <span className="text-xs text-orange-300">Verifying against: <span className="font-bold">{webVotingGroupName}</span></span>
+                    </div>
+                  )}
+                  <button
+                    onClick={() => setShowUsersPanel(true)}
+                    className="relative w-full flex items-center justify-between px-4 py-3 rounded-xl bg-blue-600/10 border border-blue-500/25 hover:bg-blue-600/20 hover:border-blue-500/40 transition-all group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-lg bg-blue-500/20 flex items-center justify-center group-hover:bg-blue-500/30 transition-colors">
+                        <svg className="w-5 h-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                        </svg>
+                      </div>
+                      <div className="text-left">
+                        <p className="text-sm font-bold text-blue-300 group-hover:text-blue-200 transition-colors">Connected Users</p>
+                        <p className="text-[11px] text-gray-500">{webSessions.length} active web voter{webSessions.length !== 1 ? "s" : ""}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {webSessions.length > 0 && (
+                        <span className="min-w-[24px] h-6 px-1.5 rounded-full bg-blue-500 text-[11px] font-bold text-white flex items-center justify-center shadow-lg shadow-blue-500/30">
+                          {webSessions.length}
+                        </span>
+                      )}
+                      <svg className="w-4 h-4 text-gray-600 group-hover:text-blue-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -3140,47 +3311,521 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
       )}
 
       {/* Activity tab */}
-      {tab === "activity" && (
-        <div className="card p-4">
-          {voteLog.length === 0 ? (
-            <div className="text-center py-6 text-gray-600 text-sm">No activity recorded yet</div>
-          ) : (
-            <div className="space-y-2 max-h-[60vh] overflow-y-auto">
-              {voteLog.map((log, i) => {
-                const logName = log.voterName || formatPhone(log.voterJid);
-                return (
-                  <div key={log.id} className="flex items-center gap-3 py-2 border-b border-gray-800/50 last:border-0">
-                    <div className="w-8 h-8 rounded-full bg-wa-green/20 flex items-center justify-center text-xs font-bold text-wa-green shrink-0">
-                      {i + 1}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-300 truncate">
-                        <span className="font-medium" title={log.voterName ? formatPhone(log.voterJid) : ""}>{logName}</span>
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        voted{" "}
-                        {log.selectedOptionText ? (
-                          log.selectedOptionText.split("|").map((opt, oi) => (
-                            <span key={oi}>
-                              {oi > 0 && <span className="text-gray-600"> + </span>}
-                              <span className="text-wa-green font-medium">{opt}</span>
+      {tab === "activity" && (() => {
+        const mergedActivity = [
+          ...voteLog.map((l) => ({ ...l, _type: "vote", _time: new Date(l.timestamp).getTime() })),
+          ...(!isViewer ? fraudAlerts.map((a) => ({ ...a, _type: "fraud", _time: new Date(a.timestamp).getTime() })) : []),
+        ].sort((a, b) => b._time - a._time);
+
+        return (
+          <div className="card p-4">
+            {mergedActivity.length === 0 ? (
+              <div className="text-center py-6 text-gray-600 text-sm">No activity recorded yet</div>
+            ) : (
+              <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+                {mergedActivity.map((entry, i) => {
+                  if (entry._type === "fraud") {
+                    return (
+                      <button
+                        key={`fraud-${entry.id || i}`}
+                        onClick={() => setFraudDetail(entry)}
+                        className="w-full flex items-center gap-3 p-3 rounded-xl bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 transition-all text-left cursor-pointer group"
+                      >
+                        <div className="w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center shrink-0">
+                          <svg className="w-4 h-4 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                          </svg>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold text-red-400 flex items-center gap-1.5">
+                            Fraud Attempt
+                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/30 text-red-300 font-bold">BLOCKED</span>
+                          </p>
+                          <p className="text-xs text-red-300/70 truncate">
+                            Impersonation of <span className="font-semibold text-red-300">{entry.existingUser}</span> (+{entry.phone})
+                          </p>
+                        </div>
+                        <div className="flex flex-col items-end shrink-0 gap-0.5">
+                          <span className="text-[10px] text-red-500/60">{new Date(entry.timestamp).toLocaleString()}</span>
+                          <span className="text-[9px] text-red-400/40 group-hover:text-red-400/70 transition-colors">Click for details</span>
+                        </div>
+                      </button>
+                    );
+                  }
+
+                  const logName = entry.voterName || formatPhone(entry.voterJid);
+                  const isWebVote = entry.source === "web";
+                  return (
+                    <div key={entry.id} className="flex items-center gap-3 py-2 border-b border-gray-800/50 last:border-0">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${isWebVote ? "bg-orange-500/20 text-orange-400" : "bg-wa-green/20 text-wa-green"}`}>
+                        {isWebVote ? "W" : ""}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-gray-300 truncate">
+                          <span className="font-medium" title={entry.voterName ? formatPhone(entry.voterJid) : ""}>{logName}</span>
+                          {isWebVote && (
+                            <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-400 font-bold align-middle" title={entry.fingerprintId ? `FP: ${entry.fingerprintId}${entry.ipAddress ? ` | IP: ${entry.ipAddress}` : ""}` : undefined}>
+                              WEB
                             </span>
-                          ))
-                        ) : (
-                          <span className="text-gray-400 italic">retracted</span>
+                          )}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          voted{" "}
+                          {entry.selectedOptionText ? (
+                            entry.selectedOptionText.split("|").map((opt, oi) => (
+                              <span key={oi}>
+                                {oi > 0 && <span className="text-gray-600"> + </span>}
+                                <span className="text-wa-green font-medium">{opt}</span>
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-gray-400 italic">retracted</span>
+                          )}
+                        </p>
+                      </div>
+                      <div className="flex flex-col items-end shrink-0">
+                        <span className="text-[10px] text-gray-600">
+                          {new Date(entry.timestamp).toLocaleString()}
+                        </span>
+                        {isWebVote && entry.ipAddress && !isViewer && (
+                          <span className="text-[9px] text-gray-700 mt-0.5" title="IP Address">
+                            {entry.ipAddress}
+                          </span>
                         )}
-                      </p>
+                      </div>
                     </div>
-                    <span className="text-[10px] text-gray-600 shrink-0">
-                      {new Date(log.timestamp).toLocaleString()}
-                    </span>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* Session Detail Modal */}
+      {sessionDetail && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setSessionDetail(null)}>
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-lg shadow-2xl animate-slide-up max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="sticky top-0 bg-gray-900 border-b border-gray-800 px-5 py-4 flex items-center justify-between z-10">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <span className="text-lg">👤</span>
+                User Details
+              </h3>
+              <button onClick={() => setSessionDetail(null)} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-all text-lg">&times;</button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {/* Identity */}
+              <div className="bg-gray-800/50 rounded-xl p-4 space-y-3">
+                <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Identity</h4>
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-full bg-wa-green/20 flex items-center justify-center text-lg font-bold text-wa-green">
+                    {sessionDetail.name ? sessionDetail.name.charAt(0).toUpperCase() : "?"}
+                  </div>
+                  <div>
+                    <p className="text-lg font-bold text-white">{sessionDetail.name || "Unknown"}</p>
+                    <p className="text-sm text-gray-400">{sessionDetail.phone}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Device & Connection */}
+              <div className="bg-gray-800/50 rounded-xl p-4 space-y-3">
+                <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Device & Connection</h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-[10px] text-gray-500 uppercase">IP Address</p>
+                    <p className="text-sm font-mono text-gray-300">{sessionDetail.ipAddress || "N/A"}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-gray-500 uppercase">Fingerprint</p>
+                    <p className="text-[11px] font-mono text-gray-400 break-all">{sessionDetail.fingerprintId || "N/A"}</p>
+                  </div>
+                  <div className="col-span-2">
+                    <p className="text-[10px] text-gray-500 uppercase">User Agent</p>
+                    <p className="text-[11px] font-mono text-gray-400 break-all leading-relaxed">{sessionDetail.userAgent || "N/A"}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-gray-500 uppercase">Connected At</p>
+                    <p className="text-sm text-gray-300">{new Date(sessionDetail.createdAt).toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-gray-500 uppercase">Last Active</p>
+                    <p className="text-sm text-gray-300">{new Date(sessionDetail.lastActiveAt).toLocaleString()}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Fingerprint Raw Data */}
+              {sessionDetail.fingerprintData && (() => {
+                let fpData = null;
+                try { fpData = JSON.parse(sessionDetail.fingerprintData); } catch (_) {}
+                if (!fpData) return null;
+                return (
+                  <div className="bg-gray-800/50 rounded-xl p-4 space-y-3">
+                    <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Fingerprint Data</h4>
+                    <div className="grid grid-cols-2 gap-2 text-[11px]">
+                      {Object.entries(fpData).slice(0, 20).map(([key, val]) => (
+                        <div key={key} className="bg-gray-900/50 rounded-lg p-2">
+                          <p className="text-[9px] text-gray-600 uppercase truncate">{key}</p>
+                          <p className="text-gray-400 font-mono truncate" title={typeof val === "object" ? JSON.stringify(val) : String(val)}>
+                            {typeof val === "object" ? JSON.stringify(val) : String(val)}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 );
-              })}
+              })()}
+
+              {/* Vote History */}
+              <div className="bg-gray-800/50 rounded-xl p-4 space-y-3">
+                <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+                  Vote History
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-700 text-gray-400 font-bold">{sessionDetail.votes?.length || 0}</span>
+                </h4>
+                {(!sessionDetail.votes || sessionDetail.votes.length === 0) ? (
+                  <p className="text-xs text-gray-600">No votes recorded</p>
+                ) : (
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                    {sessionDetail.votes.map((v, i) => (
+                      <div key={v.id || i} className="flex items-center justify-between bg-gray-900/50 rounded-lg px-3 py-2">
+                        <div>
+                          <p className="text-xs text-wa-green font-medium">{v.selectedOptionText || "Unknown"}</p>
+                          <p className="text-[10px] text-gray-600">{new Date(v.timestamp).toLocaleString()}</p>
+                        </div>
+                        {v.ipAddress && <span className="text-[10px] text-gray-600 font-mono">{v.ipAddress}</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Fraud Attempts */}
+              {sessionDetail.fraudAttempts && sessionDetail.fraudAttempts.length > 0 && (
+                <div className="bg-red-500/5 border border-red-500/20 rounded-xl p-4 space-y-3">
+                  <h4 className="text-xs font-bold text-red-400 uppercase tracking-wider flex items-center gap-2">
+                    Fraud Attempts
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 font-bold animate-pulse">{sessionDetail.fraudAttempts.length}</span>
+                  </h4>
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                    {sessionDetail.fraudAttempts.map((f, i) => (
+                      <div key={f.id || i} className="bg-red-500/5 border border-red-500/10 rounded-lg px-3 py-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/30 text-red-400 font-bold">BLOCKED</span>
+                          <span className="text-[10px] text-red-500/60">{new Date(f.timestamp).toLocaleString()}</span>
+                        </div>
+                        <p className="text-[11px] text-gray-500 mt-1">FP: <span className="font-mono text-red-400/70">{f.attemptFingerprint}</span></p>
+                        {f.attemptIp && <p className="text-[11px] text-gray-500">IP: <span className="font-mono text-red-400/70">{f.attemptIp}</span></p>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Disconnect Button */}
+              <button
+                onClick={async () => {
+                  if (!window.confirm(`Disconnect ${sessionDetail.name} (${sessionDetail.phone})?`)) return;
+                  setDisconnecting(sessionDetail.id);
+                  try {
+                    const res = await fetch(`${API_BASE}/api/web-sessions/${sessionDetail.id}`, { method: "DELETE" });
+                    if (res.ok) {
+                      setWebSessions((prev) => prev.filter((s) => s.id !== sessionDetail.id));
+                      setSessionDetail(null);
+                    }
+                  } catch (_) {}
+                  setDisconnecting(null);
+                }}
+                disabled={disconnecting === sessionDetail.id}
+                className="w-full py-3 rounded-xl text-sm font-bold bg-red-500/15 text-red-400 hover:bg-red-500/25 border border-red-500/30 transition-all disabled:opacity-50"
+              >
+                {disconnecting === sessionDetail.id ? "Disconnecting..." : "Disconnect This User"}
+              </button>
             </div>
-          )}
+          </div>
         </div>
       )}
+
+      {/* Connected Users Panel (slide-out drawer) */}
+      {showUsersPanel && (() => {
+        const handlePanelDisconnect = async (session) => {
+          if (!window.confirm(`Disconnect ${session.name || "Unknown"} (${session.phone})?`)) return;
+          setDisconnecting(session.id);
+          try {
+            const res = await fetch(`${API_BASE}/api/web-sessions/${session.id}`, { method: "DELETE" });
+            if (res.ok) {
+              setWebSessions((prev) => prev.filter((s) => s.id !== session.id));
+              if (sessionDetail?.id === session.id) setSessionDetail(null);
+            }
+          } catch (_) {}
+          setDisconnecting(null);
+        };
+
+        const handleDisconnectAll = async () => {
+          if (!window.confirm(`Disconnect all users (except admin)?`)) return;
+          setDisconnecting("all");
+          try {
+            const res = await fetch(`${API_BASE}/api/web-sessions`, { method: "DELETE" });
+            if (res.ok) {
+              setSessionDetail(null);
+              const r = await fetch(`${API_BASE}/api/web-sessions`);
+              const d = await r.json();
+              setWebSessions(Array.isArray(d) ? d : []);
+            }
+          } catch (_) {}
+          setDisconnecting(null);
+        };
+
+        const handleWhitelist = async (session) => {
+          if (!window.confirm(`Clear all fraud flags for ${session.name || "Unknown"} (${session.phone})?`)) return;
+          setDisconnecting(`wl-${session.id}`);
+          try {
+            const res = await fetch(`${API_BASE}/api/fraud-logs/phone/${encodeURIComponent(session.phone)}`, { method: "DELETE" });
+            if (res.ok) {
+              setWebSessions((prev) => prev.map((s) => s.id === session.id ? { ...s, fraudAttempts: [] } : s));
+              setFraudAlerts((prev) => prev.filter((f) => f.phone !== session.phone));
+            }
+          } catch (_) {}
+          setDisconnecting(null);
+        };
+
+        const handleResetName = async (session) => {
+          if (!window.confirm(`Reset name for ${session.name || "Unknown"} (${session.phone})? They will need to re-enter their name.`)) return;
+          setDisconnecting(`rn-${session.id}`);
+          try {
+            const res = await fetch(`${API_BASE}/api/web-sessions/${session.id}/reset-name`, { method: "PATCH" });
+            if (res.ok) {
+              setWebSessions((prev) => prev.map((s) => s.id === session.id ? { ...s, name: "Unknown" } : s));
+            }
+          } catch (_) {}
+          setDisconnecting(null);
+        };
+
+        const handleResetAllNames = async () => {
+          if (!window.confirm(`Reset names for all ${webSessions.length} users? They will all need to re-enter their names.`)) return;
+          setDisconnecting("reset-all");
+          try {
+            const res = await fetch(`${API_BASE}/api/web-sessions/reset-all-names`, { method: "PATCH" });
+            if (res.ok) {
+              setWebSessions((prev) => prev.map((s) => ({ ...s, name: "Unknown" })));
+            }
+          } catch (_) {}
+          setDisconnecting(null);
+        };
+
+        const panelParseUA = (ua) => {
+          if (!ua) return { device: "Unknown", browser: "Unknown", os: "Unknown" };
+          let browser = "Unknown", os = "Unknown", device = "Desktop";
+          if (/iPhone/i.test(ua)) { device = "iPhone"; os = "iOS"; }
+          else if (/iPad/i.test(ua)) { device = "iPad"; os = "iOS"; }
+          else if (/Android/i.test(ua)) { device = "Android"; os = "Android"; }
+          else if (/Windows/i.test(ua)) { os = "Windows"; }
+          else if (/Mac OS/i.test(ua)) { os = "macOS"; }
+          else if (/Linux/i.test(ua)) { os = "Linux"; }
+          if (/Chrome\/\S+/i.test(ua) && !/Edg/i.test(ua)) browser = "Chrome";
+          else if (/Safari/i.test(ua) && !/Chrome/i.test(ua)) browser = "Safari";
+          else if (/Firefox/i.test(ua)) browser = "Firefox";
+          else if (/Edg/i.test(ua)) browser = "Edge";
+          return { device, browser, os };
+        };
+
+        const panelTimeSince = (d) => {
+          const s = Math.floor((Date.now() - new Date(d).getTime()) / 1000);
+          if (s < 60) return `${s}s ago`;
+          if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+          if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+          return `${Math.floor(s / 86400)}d ago`;
+        };
+
+        return (
+          <div className="fixed inset-0 z-[250] flex justify-end" onClick={() => setShowUsersPanel(false)}>
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+            <div
+              className="relative w-full max-w-md h-full bg-gray-950 border-l border-gray-800 shadow-2xl flex flex-col"
+              style={{ animation: "slideInRight 0.25s ease-out" }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Panel header */}
+              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-blue-600/20 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-white">Connected Users</h3>
+                    <p className="text-[11px] text-gray-500">{webSessions.length} active session{webSessions.length !== 1 ? "s" : ""}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={async () => {
+                      try {
+                        const r = await fetch(`${API_BASE}/api/web-sessions`);
+                        const d = await r.json();
+                        if (Array.isArray(d)) setWebSessions(d);
+                      } catch (_) {}
+                    }}
+                    className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-all"
+                    title="Refresh"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                  </button>
+                  <button
+                    onClick={() => setShowUsersPanel(false)}
+                    className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-all text-lg"
+                  >
+                    &times;
+                  </button>
+                </div>
+              </div>
+
+              {/* Panel body */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                {webSessions.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full gap-3 text-center py-12">
+                    <div className="w-16 h-16 rounded-full bg-gray-800 flex items-center justify-center">
+                      <svg className="w-8 h-8 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                      </svg>
+                    </div>
+                    <p className="text-sm text-gray-500">No connected users</p>
+                    <p className="text-xs text-gray-600">Web voters will appear here once they verify</p>
+                  </div>
+                ) : (
+                  webSessions.map((session) => {
+                    const ua = panelParseUA(session.userAgent);
+                    const hasVotes = session.votes && session.votes.length > 0;
+                    const hasFraud = session.fraudAttempts && session.fraudAttempts.length > 0;
+                    return (
+                      <div key={session.id} className={`rounded-xl border overflow-hidden transition-all hover:border-gray-600 ${hasFraud ? "border-red-500/30 bg-red-500/5" : "border-gray-800 bg-gray-900/50"}`}>
+                        <div className="flex items-center gap-3 p-3">
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${hasFraud ? "bg-red-500/20 text-red-400" : hasVotes ? "bg-wa-green/20 text-wa-green" : "bg-gray-700 text-gray-400"}`}>
+                            {session.name ? session.name.charAt(0).toUpperCase() : "?"}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-bold text-white truncate">{session.name || "Unknown"}</p>
+                              {hasVotes && <span className="text-[9px] px-1.5 py-0.5 rounded bg-wa-green/20 text-wa-green font-bold shrink-0">VOTED</span>}
+                              {hasFraud && <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 font-bold animate-pulse shrink-0">FRAUD</span>}
+                            </div>
+                            <p className="text-xs text-gray-500 truncate">{session.phone}</p>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {hasFraud && (
+                              <button
+                                onClick={() => handleWhitelist(session)}
+                                disabled={disconnecting === `wl-${session.id}`}
+                                className="w-8 h-8 flex items-center justify-center rounded-lg bg-green-500/10 text-green-400 hover:bg-green-500/25 transition-all disabled:opacity-50"
+                                title="Whitelist - clear fraud flags"
+                              >
+                                {disconnecting === `wl-${session.id}` ? (
+                                  <div className="w-3.5 h-3.5 border-2 border-green-400/40 border-t-green-400 rounded-full animate-spin" />
+                                ) : (
+                                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
+                                )}
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleResetName(session)}
+                              disabled={disconnecting === `rn-${session.id}` || session.name === "Unknown"}
+                              className="w-8 h-8 flex items-center justify-center rounded-lg bg-amber-500/10 text-amber-400 hover:bg-amber-500/25 transition-all disabled:opacity-30"
+                              title="Reset name"
+                            >
+                              {disconnecting === `rn-${session.id}` ? (
+                                <div className="w-3.5 h-3.5 border-2 border-amber-400/40 border-t-amber-400 rounded-full animate-spin" />
+                              ) : (
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                              )}
+                            </button>
+                            <button
+                              onClick={() => { setSessionDetail(session); setShowUsersPanel(false); }}
+                              className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white transition-all"
+                              title="View details"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            </button>
+                            <button
+                              onClick={() => handlePanelDisconnect(session)}
+                              disabled={disconnecting === session.id}
+                              className="w-8 h-8 flex items-center justify-center rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/25 transition-all disabled:opacity-50"
+                              title="Disconnect user"
+                            >
+                              {disconnecting === session.id ? (
+                                <div className="w-3.5 h-3.5 border-2 border-red-400/40 border-t-red-400 rounded-full animate-spin" />
+                              ) : (
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                        <div className="px-3 pb-2.5 flex items-center gap-3 text-[10px] text-gray-600">
+                          <span className="flex items-center gap-1">
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                            {ua.os} / {ua.browser}
+                          </span>
+                          <span className="text-gray-700">|</span>
+                          <span>{panelTimeSince(session.lastActiveAt)}</span>
+                          {session.ipAddress && (
+                            <>
+                              <span className="text-gray-700">|</span>
+                              <span className="font-mono">{session.ipAddress}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Panel footer */}
+              {webSessions.length > 0 && (
+                <div className="border-t border-gray-800 px-5 py-3 shrink-0 space-y-3">
+                  <div className="flex items-center justify-between text-[11px] text-gray-500">
+                    <span>{webSessions.filter(s => s.votes?.length > 0).length} voted</span>
+                    <span>{webSessions.filter(s => s.fraudAttempts?.length > 0).length} fraud flags</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleResetAllNames}
+                      disabled={disconnecting === "reset-all"}
+                      className="flex-1 py-2.5 rounded-xl text-xs font-bold bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border border-amber-500/20 hover:border-amber-500/40 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {disconnecting === "reset-all" ? (
+                        <div className="w-3.5 h-3.5 border-2 border-amber-400/40 border-t-amber-400 rounded-full animate-spin" />
+                      ) : (
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                      )}
+                      Reset All Names
+                    </button>
+                    <button
+                      onClick={handleDisconnectAll}
+                      disabled={disconnecting === "all"}
+                      className="flex-1 py-2.5 rounded-xl text-xs font-bold bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/40 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {disconnecting === "all" ? (
+                        <div className="w-3.5 h-3.5 border-2 border-red-400/40 border-t-red-400 rounded-full animate-spin" />
+                      ) : (
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+                      )}
+                      Disconnect All
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+            <style>{`
+              @keyframes slideInRight {
+                from { transform: translateX(100%); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+              }
+            `}</style>
+          </div>
+        );
+      })()}
 
       {lastUpdate && (
         <p className="text-center text-[10px] text-gray-600">
@@ -3468,6 +4113,87 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
               to { transform: translateY(-10px) scale(1.2); }
             }
           `}</style>
+        </div>
+      )}
+
+      {/* Fraud Detail Modal */}
+      {fraudDetail && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setFraudDetail(null)}>
+          <div className="bg-gray-900 border border-red-500/40 rounded-2xl w-full max-w-md shadow-2xl shadow-red-500/10 animate-slide-up" onClick={(e) => e.stopPropagation()}>
+            <div className="p-5 border-b border-red-500/20">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-red-500/20 flex items-center justify-center">
+                  <svg className="w-6 h-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-red-400">Fraud Attempt Detected</h3>
+                  <p className="text-xs text-red-300/60">Impersonation attempt blocked</p>
+                </div>
+                <button onClick={() => setFraudDetail(null)} className="ml-auto w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-all text-lg">&times;</button>
+              </div>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="bg-red-500/5 border border-red-500/15 rounded-xl p-4 space-y-3">
+                <h4 className="text-xs font-bold text-red-400 uppercase tracking-wider">Target Identity</h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-[10px] text-gray-500 uppercase">Name</p>
+                    <p className="text-sm font-bold text-white">{fraudDetail.existingUser}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-gray-500 uppercase">Phone</p>
+                    <p className="text-sm font-medium text-gray-300">+{fraudDetail.phone}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-gray-500 uppercase">Original IP</p>
+                    <p className="text-sm font-mono text-gray-300">{fraudDetail.existingIp || "N/A"}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-gray-500 uppercase">Original Fingerprint</p>
+                    <p className="text-[11px] font-mono text-gray-400 break-all">{fraudDetail.existingFingerprint || "N/A"}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-red-500/5 border border-red-500/15 rounded-xl p-4 space-y-3">
+                <h4 className="text-xs font-bold text-red-400 uppercase tracking-wider">Attacker Details</h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-[10px] text-gray-500 uppercase">IP Address</p>
+                    <p className="text-sm font-mono text-red-300">{fraudDetail.attemptIp || "N/A"}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-gray-500 uppercase">Fingerprint</p>
+                    <p className="text-[11px] font-mono text-red-400 break-all">{fraudDetail.attemptFingerprint || "N/A"}</p>
+                  </div>
+                  <div className="col-span-2">
+                    <p className="text-[10px] text-gray-500 uppercase">User Agent (Device)</p>
+                    <p className="text-[11px] font-mono text-gray-400 break-all leading-relaxed">{fraudDetail.attemptUserAgent || "N/A"}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-gray-800/50 rounded-xl p-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-[10px] text-gray-500 uppercase">Timestamp</p>
+                    <p className="text-sm text-gray-300">{new Date(fraudDetail.timestamp).toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-gray-500 uppercase">Status</p>
+                    <p className="text-sm font-bold text-red-400 flex items-center gap-1">
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                      </svg>
+                      BLOCKED
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

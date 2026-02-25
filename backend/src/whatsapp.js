@@ -26,12 +26,112 @@ let prismaRef = null;
 let isOnline = false;
 
 const contactNames = new Map();
+const dbPersistQueue = new Set();
+let dbPersistTimer = null;
 
 function setContactName(jid, name) {
   if (!jid || !name) return;
-  const normalized = jid.replace("@lid", "@s.whatsapp.net");
-  contactNames.set(normalized, name);
   contactNames.set(jid, name);
+
+  const isLid = jid.includes("@lid");
+  let phoneNum = null;
+
+  if (isLid) {
+    const lidNum = jid.replace("@lid", "").replace("@s.whatsapp.net", "");
+    phoneNum = lidToPhone.get(jid) || lidToPhone.get(lidNum) || lidToPhone.get(jid.replace("@lid", "@s.whatsapp.net"));
+    if (phoneNum) {
+      contactNames.set(phoneNum + "@s.whatsapp.net", name);
+    }
+  } else {
+    const stripped = jid.replace("@s.whatsapp.net", "").replace("@c.us", "");
+    if (/^\d+$/.test(stripped) && stripped.length >= 7) {
+      phoneNum = stripped;
+      contactNames.set(phoneNum + "@s.whatsapp.net", name);
+    }
+  }
+
+  // Persist to DB (batched)
+  if (phoneNum) {
+    dbPersistQueue.add(JSON.stringify({ phone: phoneNum, name }));
+    scheduleDbPersist();
+  }
+}
+
+function scheduleDbPersist() {
+  if (dbPersistTimer) return;
+  dbPersistTimer = setTimeout(async () => {
+    dbPersistTimer = null;
+    if (!prismaRef || dbPersistQueue.size === 0) return;
+    const batch = [...dbPersistQueue];
+    dbPersistQueue.clear();
+    try {
+      const entries = batch.map(s => JSON.parse(s));
+      const uniqueByPhone = new Map();
+      for (const e of entries) uniqueByPhone.set(e.phone, e.name);
+      const ops = [...uniqueByPhone.entries()].map(([phone, name]) =>
+        prismaRef.contactName.upsert({
+          where: { phone },
+          update: { name, source: "pushName" },
+          create: { phone, name, source: "pushName" },
+        })
+      );
+      await Promise.all(ops);
+    } catch (e) {
+      console.error("[Contacts] DB persist error:", e.message);
+    }
+  }, 5000);
+}
+
+async function loadContactNamesFromDb() {
+  if (!prismaRef) return;
+  try {
+    const stored = await prismaRef.contactName.findMany();
+    for (const c of stored) {
+      contactNames.set(c.phone + "@s.whatsapp.net", c.name);
+    }
+    console.log(`[Contacts] Loaded ${stored.length} names from ContactName table`);
+
+    // Import names from VoteLog (WhatsApp votes contain pushName)
+    let imported = 0;
+    const voters = await prismaRef.voteLog.findMany({
+      where: { voterName: { not: null }, voterPhone: { not: null } },
+      distinct: ["voterPhone"],
+      select: { voterPhone: true, voterName: true },
+      orderBy: { timestamp: "desc" },
+    });
+    for (const v of voters) {
+      if (!v.voterName || !v.voterPhone || v.voterPhone.length < 7) continue;
+      const phoneJid = v.voterPhone + "@s.whatsapp.net";
+      if (!contactNames.has(phoneJid)) {
+        contactNames.set(phoneJid, v.voterName);
+        dbPersistQueue.add(JSON.stringify({ phone: v.voterPhone, name: v.voterName }));
+        imported++;
+      }
+    }
+
+    // Import names from WebVoterSession (user-entered names override others)
+    const sessions = await prismaRef.webVoterSession.findMany({
+      where: { name: { notIn: ["Unknown", ""] } },
+      distinct: ["phone"],
+      select: { phone: true, name: true },
+      orderBy: { lastActiveAt: "desc" },
+    });
+    for (const s of sessions) {
+      if (!s.name || !s.phone || s.phone.length < 7) continue;
+      const phoneJid = s.phone + "@s.whatsapp.net";
+      // User-entered names take priority
+      contactNames.set(phoneJid, s.name);
+      dbPersistQueue.add(JSON.stringify({ phone: s.phone, name: s.name }));
+      imported++;
+    }
+
+    if (imported > 0) {
+      scheduleDbPersist();
+      console.log(`[Contacts] Imported ${imported} additional names from VoteLog/WebVoterSession (total: ${contactNames.size})`);
+    }
+  } catch (e) {
+    console.error("[Contacts] Failed to load from DB:", e.message);
+  }
 }
 
 function getContactName(jid) {
@@ -52,6 +152,37 @@ function mapLidToPhone(lid, phoneJid) {
   lidToPhone.set(lid.replace("@lid", "@s.whatsapp.net"), phoneNum);
   const lidNum = lid.replace("@lid", "").replace("@s.whatsapp.net", "");
   lidToPhone.set(lidNum, phoneNum);
+
+  // Back-fill: if we already have a name for this LID, also cache under phone
+  const lidName = contactNames.get(lid) || contactNames.get(lidNum + "@lid");
+  if (lidName) {
+    contactNames.set(phoneNum + "@s.whatsapp.net", lidName);
+  }
+}
+
+function crossReferenceLidNames() {
+  let resolved = 0;
+  for (const [lid, phoneNum] of lidToPhone.entries()) {
+    if (!phoneNum || !/^\d+$/.test(phoneNum)) continue;
+    const phoneJid = phoneNum + "@s.whatsapp.net";
+    if (contactNames.has(phoneJid)) continue;
+
+    // Check all variations of LID keys for names
+    const lidJid = lid.includes("@") ? lid : lid + "@lid";
+    const name = contactNames.get(lid) || contactNames.get(lidJid)
+      || contactNames.get(lid.replace("@s.whatsapp.net", "@lid"));
+    if (name) {
+      contactNames.set(phoneJid, name);
+      dbPersistQueue.add(JSON.stringify({ phone: phoneNum, name }));
+      resolved++;
+    }
+  }
+  if (resolved > 0) {
+    scheduleDbPersist();
+    console.log(`[Contacts] Cross-reference: resolved ${resolved} new phone names (total names: ${contactNames.size})`);
+  } else {
+    console.log(`[Contacts] Cross-reference: no new names resolved (total names: ${contactNames.size}, lidMap: ${lidToPhone.size})`);
+  }
 }
 
 function isLidNumber(num) {
@@ -364,6 +495,7 @@ async function handleMessagesUpdate(updates, prisma, io) {
 async function initWhatsApp(io, prisma) {
   ioRef = io;
   prismaRef = prisma;
+  await loadContactNamesFromDb();
   const logger = pino({ level: "warn" });
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
   const { version } = await fetchLatestBaileysVersion();
@@ -425,19 +557,29 @@ async function initWhatsApp(io, prisma) {
 
   sock.ev.on("contacts.upsert", (contacts) => {
     let mapped = 0;
+    let withNames = 0;
     for (const c of contacts) {
       const name = c.notify || c.verifiedName || c.name || c.shortName;
       const phoneJid = c.jid || (c.id && !c.id.includes("@lid") ? c.id : null);
       const lidJid = c.lid || (c.id && c.id.includes("@lid") ? c.id : null);
-      if (name && phoneJid) setContactName(phoneJid, name);
-      if (name && lidJid) setContactName(lidJid, name);
+      if (name) {
+        withNames++;
+        if (phoneJid) setContactName(phoneJid, name);
+        if (lidJid) setContactName(lidJid, name);
+      }
       if (phoneJid && lidJid) {
         mapLidToPhone(lidJid, phoneJid);
         mapped++;
       }
     }
     if (contacts.length > 0) {
-      console.log(`[Contacts] Cached ${contacts.length} contacts (${mapped} lid-mapped, names: ${contactNames.size}, lidMap: ${lidToPhone.size})`);
+      // Log a sample of contacts for debugging (both named and unnamed)
+      const samples = contacts.slice(0, 3);
+      for (const c of samples) {
+        const keys = Object.keys(c).filter(k => c[k] != null && c[k] !== "");
+        console.log(`[Contacts] Sample: ${JSON.stringify(Object.fromEntries(keys.map(k => [k, c[k]])))}`);
+      }
+      console.log(`[Contacts] Cached ${contacts.length} contacts (${withNames} with names, ${mapped} lid-mapped, names: ${contactNames.size}, lidMap: ${lidToPhone.size})`);
     }
   });
 
@@ -446,8 +588,11 @@ async function initWhatsApp(io, prisma) {
       const name = c.notify || c.verifiedName || c.name || c.shortName;
       const phoneJid = c.jid || (c.id && !c.id.includes("@lid") ? c.id : null);
       const lidJid = c.lid || (c.id && c.id.includes("@lid") ? c.id : null);
-      if (name && phoneJid) setContactName(phoneJid, name);
-      if (name && lidJid) setContactName(lidJid, name);
+      if (name) {
+        console.log(`[Contacts] Update: ${name} (jid: ${phoneJid || "?"}, lid: ${lidJid || "?"})`);
+        if (phoneJid) setContactName(phoneJid, name);
+        if (lidJid) setContactName(lidJid, name);
+      }
       if (phoneJid && lidJid) {
         mapLidToPhone(lidJid, phoneJid);
       }
@@ -529,6 +674,16 @@ async function initWhatsApp(io, prisma) {
         }
       }
 
+      // Force contacts re-sync from WhatsApp
+      setTimeout(async () => {
+        try {
+          await sock.resyncAppState(["critical_unblock_low", "regular", "regular_high", "regular_low"]);
+          console.log("[Contacts] Triggered app state re-sync");
+        } catch (e) {
+          console.log("[Contacts] App state re-sync error:", e.message);
+        }
+      }, 3000);
+
       setTimeout(async () => {
         try {
           const groups = await prisma.group.findMany({
@@ -537,11 +692,24 @@ async function initWhatsApp(io, prisma) {
           for (const g of groups) {
             await loadGroupParticipantNames(g.jid);
           }
+          // Also load the web voting verification group
+          try {
+            const verifyGroup = await prisma.appSettings.findUnique({ where: { key: "web_voting_group_jid" } });
+            if (verifyGroup?.value) {
+              await loadGroupParticipantNames(verifyGroup.value);
+            }
+          } catch {}
           console.log(`[Contacts] After group load: names=${contactNames.size}, lidMap=${lidToPhone.size}`);
         } catch (e) {
           console.error("[Contacts] Auto-load error:", e.message);
         }
       }, 5000);
+
+      // After 15s, cross-reference all LID names -> phone names
+      setTimeout(() => {
+        crossReferenceLidNames();
+      }, 15000);
+
     }
 
     if (connection === "close") {
@@ -872,6 +1040,144 @@ async function getAggregatedVotes(pollId, prisma) {
   return { options: result, uniqueVoters };
 }
 
+async function resolveContactName(phoneNum) {
+  if (!phoneNum) return null;
+  const phoneJid = phoneNum + "@s.whatsapp.net";
+
+  // 1. Check in-memory cache (includes DB-loaded, LID-mapped, and live contacts.update names)
+  const byPhone = getContactName(phoneJid);
+  if (byPhone) return byPhone;
+
+  // 2. Reverse LID lookup
+  for (const [lid, mapped] of lidToPhone.entries()) {
+    if (mapped === phoneNum) {
+      const lidName = getContactName(lid)
+        || getContactName(lid.includes("@") ? lid : lid + "@lid");
+      if (lidName) {
+        setContactName(phoneJid, lidName);
+        return lidName;
+      }
+    }
+  }
+
+  // 3. Check persistent DB (ContactName, WebVoterSession, VoteLog)
+  if (prismaRef) {
+    try {
+      // ContactName table
+      const dbContact = await prismaRef.contactName.findUnique({ where: { phone: phoneNum } });
+      if (dbContact?.name) {
+        contactNames.set(phoneJid, dbContact.name);
+        return dbContact.name;
+      }
+
+      // WebVoterSession (user-entered names - highest trust)
+      const session = await prismaRef.webVoterSession.findFirst({
+        where: { phone: phoneNum, name: { notIn: ["Unknown", ""] } },
+        orderBy: { lastActiveAt: "desc" },
+        select: { name: true },
+      });
+      if (session?.name) {
+        setContactName(phoneJid, session.name);
+        return session.name;
+      }
+
+      // VoteLog (push names from WhatsApp poll votes)
+      const vote = await prismaRef.voteLog.findFirst({
+        where: { voterPhone: phoneNum, voterName: { not: null } },
+        orderBy: { timestamp: "desc" },
+        select: { voterName: true },
+      });
+      if (vote?.voterName) {
+        setContactName(phoneJid, vote.voterName);
+        return vote.voterName;
+      }
+    } catch {}
+  }
+
+  // 4. Try business profile (WhatsApp Business accounts only)
+  if (sock) {
+    try {
+      const biz = await sock.getBusinessProfile(phoneJid);
+      if (biz?.profile?.name) {
+        setContactName(phoneJid, biz.profile.name);
+        return biz.profile.name;
+      }
+    } catch {}
+  }
+
+  return null;
+}
+
+async function checkGroupMembership(groupJid, phoneNumber) {
+  if (!sock) throw new Error("WhatsApp not connected");
+  if (!groupJid || !phoneNumber) throw new Error("groupJid and phoneNumber required");
+
+  const normalized = phoneNumber.replace(/[^0-9]/g, "");
+  if (normalized.length < 7) throw new Error("Invalid phone number");
+
+  // Build candidate list: original, without leading zero, with 972 prefix
+  const candidates = [normalized];
+  if (normalized.startsWith("0")) {
+    const withoutZero = normalized.slice(1);
+    candidates.push("972" + withoutZero);
+    candidates.push(withoutZero);
+  }
+
+  const meta = await sock.groupMetadata(groupJid);
+  if (!meta?.participants) throw new Error("Could not fetch group metadata");
+
+  // Helper: check if a phone matches our candidates
+  const phoneMatches = (phone) => candidates.includes(phone) || candidates.some(c => phone.endsWith(c) && c.length >= 7);
+
+  for (const p of meta.participants) {
+    const rawId = p.id || p.jid || "";
+    const isLidId = rawId.includes("@lid");
+    const phoneJid = p.jid || (!isLidId ? rawId : null);
+    const lidJid = p.lid || (isLidId ? rawId : null);
+
+    // Direct phone match (when participant has phone JID)
+    if (phoneJid && !phoneJid.includes("@lid")) {
+      const pPhone = phoneJid.split("@")[0];
+      if (phoneMatches(pPhone)) {
+        const name = p.notify || p.verifiedName || p.name || await resolveContactName(pPhone);
+        console.log(`[WebVote] Phone match: ${pPhone}, name: ${name || "(none)"}`);
+        return { found: true, name, jid: phoneJid, phone: pPhone };
+      }
+    }
+
+    // LID-based match: look up mapped phone from LID
+    const lidKey = lidJid || (isLidId ? rawId : null);
+    if (lidKey) {
+      const mappedPhone = lidToPhone.get(lidKey)
+        || lidToPhone.get(lidKey.replace("@lid", ""))
+        || lidToPhone.get(lidKey.replace("@lid", "@s.whatsapp.net"));
+      if (mappedPhone && phoneMatches(mappedPhone)) {
+        const name = p.notify || p.verifiedName || p.name || await resolveContactName(mappedPhone);
+        console.log(`[WebVote] LID match: ${lidKey} -> phone ${mappedPhone}, name: ${name || "(none)"}`);
+        return { found: true, name, jid: mappedPhone + "@s.whatsapp.net", phone: mappedPhone };
+      }
+    }
+  }
+
+  // Fallback: scan lidToPhone map for the phone, verify membership
+  for (const [lid, phone] of lidToPhone.entries()) {
+    if (!phoneMatches(phone)) continue;
+    const isInGroup = meta.participants.some(p => {
+      const pId = (p.id || p.jid || "").split("@")[0];
+      const pLid = (p.lid || "").split("@")[0];
+      const lidNum = lid.split("@")[0];
+      return pId === lidNum || pLid === lidNum;
+    });
+    if (isInGroup) {
+      const name = await resolveContactName(phone);
+      console.log(`[WebVote] Fallback match: ${lid} -> phone ${phone}, name: ${name || "(none)"}`);
+      return { found: true, name, jid: phone + "@s.whatsapp.net", phone };
+    }
+  }
+
+  return { found: false };
+}
+
 async function logoutWhatsApp() {
   try {
     if (sock) {
@@ -907,6 +1213,16 @@ async function logoutWhatsApp() {
   }, 3000);
 }
 
+function getAllContacts() {
+  return { contactNames: Object.fromEntries(contactNames), lidToPhone: Object.fromEntries(lidToPhone) };
+}
+
+function getAdminPhone() {
+  const s = getSock();
+  if (!s?.user?.id) return null;
+  return s.user.id.split(":")[0].replace("@s.whatsapp.net", "");
+}
+
 module.exports = {
   initWhatsApp,
   getSock,
@@ -919,4 +1235,8 @@ module.exports = {
   jidToPhone,
   loadGroupParticipantNames,
   logoutWhatsApp,
+  checkGroupMembership,
+  getAllContacts,
+  resolveContactName,
+  getAdminPhone,
 };

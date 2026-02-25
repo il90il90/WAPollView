@@ -45,16 +45,56 @@ model PollOption {
 }
 
 model VoteLog {
-  id               String     @id @default(cuid())
-  pollId           String
-  poll             Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
-  optionId         String?
-  option           PollOption? @relation(fields: [optionId], references: [id], onDelete: SetNull)
-  voterJid         String
-  voterName        String?
-  voterPhone       String?
+  id                 String      @id @default(cuid())
+  pollId             String
+  poll               Poll        @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  optionId           String?
+  option             PollOption? @relation(fields: [optionId], references: [id], onDelete: SetNull)
+  voterJid           String
+  voterName          String?
+  voterPhone         String?
   selectedOptionText String
-  timestamp        DateTime   @default(now())
+  source             String      @default("whatsapp")
+  fingerprintId      String?
+  ipAddress          String?
+  timestamp          DateTime    @default(now())
+}
+
+model WebVoterSession {
+  id              String   @id @default(cuid())
+  phone           String
+  name            String
+  groupJid        String
+  fingerprintId   String
+  fingerprintData String?
+  userAgent       String?
+  ipAddress       String?
+  createdAt       DateTime @default(now())
+  lastActiveAt    DateTime @default(now())
+
+  @@index([phone])
+  @@index([fingerprintId])
+}
+
+model ContactName {
+  phone     String   @id
+  name      String
+  source    String   @default("pushName")
+  updatedAt DateTime @updatedAt
+}
+
+model FraudLog {
+  id                  String   @id @default(cuid())
+  phone               String
+  existingUser        String
+  existingFingerprint String
+  existingIp          String?
+  attemptFingerprint  String
+  attemptIp           String?
+  attemptUserAgent    String?
+  timestamp           DateTime @default(now())
+
+  @@index([phone])
 }
 
 model AppSettings {
