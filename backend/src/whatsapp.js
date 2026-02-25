@@ -1223,6 +1223,13 @@ function getAdminPhone() {
   return s.user.id.split(":")[0].replace("@s.whatsapp.net", "");
 }
 
+function clearContactName(phone) {
+  const cleaned = phone.replace(/[^0-9]/g, "");
+  contactNames.delete(cleaned + "@s.whatsapp.net");
+  contactNames.delete(cleaned + "@lid");
+  contactNames.delete(cleaned);
+}
+
 module.exports = {
   initWhatsApp,
   getSock,
@@ -1239,4 +1246,5 @@ module.exports = {
   getAllContacts,
   resolveContactName,
   getAdminPhone,
+  clearContactName,
 };

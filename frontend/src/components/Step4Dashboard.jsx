@@ -2118,6 +2118,7 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
   const [sessionDetail, setSessionDetail] = useState(null);
   const [disconnecting, setDisconnecting] = useState(null);
   const [showUsersPanel, setShowUsersPanel] = useState(false);
+  const [resettingPoll, setResettingPoll] = useState(false);
   const refreshTimerRef = useRef(null);
   const splashIdRef = useRef(0);
   const chartRef = useRef(null);
@@ -2322,6 +2323,38 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
     } catch (err) {
       console.error("Failed to reopen poll:", err);
     }
+  };
+
+  const handleResetPoll = async () => {
+    if (!window.confirm("Reset this poll? This will delete ALL votes, web sessions, and fraud logs. This action cannot be undone!")) return;
+    if (!window.confirm("Are you absolutely sure? All data will be permanently deleted.")) return;
+    setResettingPoll(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/polls/${poll.id}/reset`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await res.json();
+      if (data.success) {
+        setVotes([]);
+        setTotalVotes(0);
+        setUniqueVoters(0);
+        setVoteLog([]);
+        setFraudAlerts([]);
+        setFraudDetail(null);
+        setWebSessions([]);
+        setSessionDetail(null);
+        setIsPollLocked(false);
+        setDeclaredWinner(null);
+        setDiceWinner(null);
+        setShowWinnerOverlay(false);
+        if (winnerFireworksRef.current) clearInterval(winnerFireworksRef.current);
+        fetchData();
+      }
+    } catch (err) {
+      console.error("Failed to reset poll:", err);
+    }
+    setResettingPoll(false);
   };
 
   const handleExportPDF = async (mode) => {
@@ -3012,6 +3045,23 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
               Reopen Poll
             </button>
           )}
+          {!isViewer && (
+            <button
+              onClick={handleResetPoll}
+              disabled={resettingPoll}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all bg-gray-700 text-gray-300 hover:bg-red-600 hover:text-white hover:shadow-lg hover:shadow-red-600/30 disabled:opacity-50"
+              title="Reset poll - delete all votes and sessions"
+            >
+              {resettingPoll ? (
+                <div className="w-3.5 h-3.5 border-2 border-gray-400/40 border-t-gray-400 rounded-full animate-spin" />
+              ) : (
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              )}
+              Reset
+            </button>
+          )}
         </div>
       </div>
 
@@ -3603,12 +3653,15 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
         };
 
         const handleResetAllNames = async () => {
-          if (!window.confirm(`Reset names for all ${webSessions.length} users? They will all need to re-enter their names.`)) return;
+          if (!window.confirm(`Disconnect all users (except admin) and reset? They will need to re-verify and enter their names again.`)) return;
           setDisconnecting("reset-all");
           try {
             const res = await fetch(`${API_BASE}/api/web-sessions/reset-all-names`, { method: "PATCH" });
             if (res.ok) {
-              setWebSessions((prev) => prev.map((s) => ({ ...s, name: "Unknown" })));
+              setSessionDetail(null);
+              const r = await fetch(`${API_BASE}/api/web-sessions`);
+              const d = await r.json();
+              setWebSessions(Array.isArray(d) ? d : []);
             }
           } catch (_) {}
           setDisconnecting(null);
@@ -3799,7 +3852,7 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
                       ) : (
                         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                       )}
-                      Reset All Names
+                      Reset All
                     </button>
                     <button
                       onClick={handleDisconnectAll}

@@ -138,8 +138,27 @@ export default function ViewerMode({ socket, isConnected, onBack, onAdminClick }
     const handleSettingsChange = (data) => {
       setWebVotingEnabled(data?.enabled || false);
     };
+    const handleForceDisconnect = () => {
+      localStorage.removeItem("webVoterSession");
+      setVoterSession(null);
+      setCurrentVote(null);
+      setSelectedOptions([]);
+    };
+    const handlePollReset = () => {
+      localStorage.removeItem("webVoterSession");
+      setVoterSession(null);
+      setCurrentVote(null);
+      setSelectedOptions([]);
+      setVotes([]);
+    };
     socket.on("web_voting_settings_changed", handleSettingsChange);
-    return () => socket.off("web_voting_settings_changed", handleSettingsChange);
+    socket.on("force_disconnect_web_voters", handleForceDisconnect);
+    socket.on("poll_reset", handlePollReset);
+    return () => {
+      socket.off("web_voting_settings_changed", handleSettingsChange);
+      socket.off("force_disconnect_web_voters", handleForceDisconnect);
+      socket.off("poll_reset", handlePollReset);
+    };
   }, [socket]);
 
   useEffect(() => {
@@ -282,6 +301,13 @@ export default function ViewerMode({ socket, isConnected, onBack, onAdminClick }
           selectedOptions,
         }),
       });
+      if (res.status === 404 || res.status === 403) {
+        localStorage.removeItem("webVoterSession");
+        setVoterSession(null);
+        setCurrentVote(null);
+        setSelectedOptions([]);
+        return;
+      }
       const data = await res.json();
       if (data.success) {
         setCurrentVote([...selectedOptions]);

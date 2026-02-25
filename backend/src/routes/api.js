@@ -496,6 +496,40 @@ module.exports = function (prisma) {
     }
   });
 
+  router.post("/polls/:pollId/reset", async (req, res) => {
+    try {
+      const { pollId } = req.params;
+      const poll = await prisma.poll.findUnique({ where: { id: pollId } });
+      if (!poll) return res.status(404).json({ success: false, error: "Poll not found" });
+
+      const deletedVotes = await prisma.voteLog.deleteMany({ where: { pollId } });
+      const deletedSessions = await prisma.webVoterSession.deleteMany({});
+      const deletedFraud = await prisma.fraudLog.deleteMany({});
+
+      await prisma.poll.update({
+        where: { id: pollId },
+        data: { isLocked: false, winnerOption: null },
+      });
+
+      const io = req.app.get("io");
+      if (io) {
+        io.emit("poll_reset", { pollId, timestamp: Date.now() });
+        io.emit("poll_data_changed", { pollId, timestamp: Date.now() });
+      }
+
+      console.log(`[API] Poll reset: ${pollId} - deleted ${deletedVotes.count} votes, ${deletedSessions.count} sessions, ${deletedFraud.count} fraud logs`);
+      res.json({
+        success: true,
+        deletedVotes: deletedVotes.count,
+        deletedSessions: deletedSessions.count,
+        deletedFraud: deletedFraud.count,
+      });
+    } catch (err) {
+      console.error("[API] /polls/:pollId/reset error:", err.message);
+      res.status(500).json({ success: false, error: "Failed to reset poll" });
+    }
+  });
+
   router.post("/admin/wa-logout", async (req, res) => {
     try {
       const { logoutWhatsApp } = require("../whatsapp");
@@ -983,7 +1017,15 @@ module.exports = function (prisma) {
   router.delete("/web-sessions/:id", async (req, res) => {
     try {
       const { id } = req.params;
+      const session = await prisma.webVoterSession.findUnique({ where: { id } });
+      if (!session) return res.status(404).json({ error: "Session not found" });
+
       await prisma.webVoterSession.delete({ where: { id } });
+
+      const { clearContactName } = require("../whatsapp");
+      clearContactName(session.phone);
+      await prisma.contactName.deleteMany({ where: { phone: session.phone } });
+
       res.json({ success: true });
     } catch (err) {
       console.error("[API] DELETE /web-sessions error:", err.message);
@@ -1022,13 +1064,19 @@ module.exports = function (prisma) {
 
   router.patch("/web-sessions/reset-all-names", async (req, res) => {
     try {
-      const result = await prisma.webVoterSession.updateMany({
-        data: { name: "Unknown" },
-      });
+      const { getAdminPhone } = require("../whatsapp");
+      const adminPhone = getAdminPhone();
+      const where = adminPhone ? { phone: { not: { contains: adminPhone } } } : {};
+      const result = await prisma.webVoterSession.deleteMany({ where });
+
+      const io = req.app.get("io");
+      if (io) io.emit("force_disconnect_web_voters", { timestamp: Date.now() });
+
+      console.log(`[API] Reset all contacts: deleted ${result.count} sessions (admin excluded: ${!!adminPhone})`);
       res.json({ success: true, count: result.count });
     } catch (err) {
       console.error("[API] PATCH /web-sessions/reset-all-names error:", err.message);
-      res.status(500).json({ error: "Failed to reset all names" });
+      res.status(500).json({ error: "Failed to reset contacts" });
     }
   });
 
