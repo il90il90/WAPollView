@@ -70,8 +70,12 @@ export default function ViewerMode({ socket, isConnected, onBack, onAdminClick }
     fetchViewerPoll();
   }, [fetchViewerPoll]);
 
-  // Fetch web voting settings
+  // Fetch web voting settings (web-only polls are always enabled)
   useEffect(() => {
+    if (poll?.source === "web") {
+      setWebVotingEnabled(true);
+      return;
+    }
     (async () => {
       try {
         const res = await fetch(`${API_BASE}/api/web-vote/settings`);
@@ -79,7 +83,7 @@ export default function ViewerMode({ socket, isConnected, onBack, onAdminClick }
         setWebVotingEnabled(data.enabled || false);
       } catch {}
     })();
-  }, []);
+  }, [poll?.source]);
 
   // Initialize FingerprintJS lazily
   const getFingerprint = useCallback(async () => {
@@ -136,6 +140,7 @@ export default function ViewerMode({ socket, isConnected, onBack, onAdminClick }
   useEffect(() => {
     if (!socket) return;
     const handleSettingsChange = (data) => {
+      if (poll?.source === "web") return;
       setWebVotingEnabled(data?.enabled || false);
     };
     const handleForceDisconnect = () => {
@@ -277,13 +282,13 @@ export default function ViewerMode({ socket, isConnected, onBack, onAdminClick }
 
   const handleOptionToggle = (optionId) => {
     if (poll?.isLocked) return;
-    const maxSelect = poll?.selectableCount || 1;
+    const maxSelect = poll?.selectableCount ?? 1;
     setSelectedOptions((prev) => {
       if (prev.includes(optionId)) {
         return prev.filter((id) => id !== optionId);
       }
       if (maxSelect === 1) return [optionId];
-      if (prev.length >= maxSelect) return prev;
+      if (maxSelect > 1 && prev.length >= maxSelect) return prev;
       return [...prev, optionId];
     });
   };

@@ -26,6 +26,7 @@ model Poll {
   groupId        String
   group          Group        @relation(fields: [groupId], references: [id], onDelete: Cascade)
   selectableCount Int          @default(1)
+  source         String       @default("whatsapp")
   isActive       Boolean      @default(true)
   isLocked       Boolean      @default(false)
   winnerOption   String?

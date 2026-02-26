@@ -2761,16 +2761,21 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
 
   useEffect(() => {
     if (isViewer) return;
+    if (poll?.source === "web") {
+      setWebVotingEnabled(true);
+      setShowWebVotingSettings(true);
+      fetchGroupsForWebVoting();
+    }
     (async () => {
       try {
         const res = await fetch(`${API_BASE}/api/web-vote/settings`);
         const data = await res.json();
-        setWebVotingEnabled(data.enabled || false);
+        setWebVotingEnabled(poll?.source === "web" ? true : (data.enabled || false));
         setWebVotingGroupJid(data.groupJid || null);
         setWebVotingGroupName(data.groupName || null);
       } catch {}
     })();
-  }, [isViewer]);
+  }, [isViewer, poll?.source]);
 
   const handleWebVotingToggle = async (enabled) => {
     setWebVotingLoading(true);
@@ -2952,7 +2957,9 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
             </div>
           )}
           <div className="min-w-0">
-            <h2 className="text-lg font-bold truncate">{poll?.title}</h2>
+            <h2 className="text-lg font-bold truncate flex items-center gap-2">
+              {poll?.title}
+            </h2>
             {!isViewer && editingName ? (
               <input
                 ref={nameInputRef}
@@ -3219,27 +3226,35 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
             </svg>
             Web Voting
-            <span className={`w-2 h-2 rounded-full ${webVotingEnabled ? "bg-green-400 animate-pulse" : "bg-gray-600"}`} />
+            <span className={`w-2 h-2 rounded-full ${webVotingEnabled || poll?.source === "web" ? "bg-green-400 animate-pulse" : "bg-gray-600"}`} />
             <svg className={`w-3 h-3 transition-transform ${showWebVotingSettings ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
           </button>
           {showWebVotingSettings && (
             <div className="mt-3 p-4 rounded-xl bg-gray-800/50 border border-gray-700 space-y-4">
+              {poll?.source === "web" && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                  <svg className="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                  </svg>
+                  <span className="text-xs text-blue-300 font-medium">Voting is only available via the web UI</span>
+                </div>
+              )}
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-200">Allow Web Voting</p>
                   <p className="text-[11px] text-gray-500">Viewers can vote directly from their browser</p>
                 </div>
                 <button
-                  onClick={() => handleWebVotingToggle(!webVotingEnabled)}
-                  disabled={webVotingLoading}
-                  className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${webVotingEnabled ? "bg-green-500" : "bg-gray-600"} ${webVotingLoading ? "opacity-50" : ""}`}
+                  onClick={() => poll?.source !== "web" && handleWebVotingToggle(!webVotingEnabled)}
+                  disabled={webVotingLoading || poll?.source === "web"}
+                  className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${webVotingEnabled || poll?.source === "web" ? "bg-green-500" : "bg-gray-600"} ${webVotingLoading || poll?.source === "web" ? "opacity-50 cursor-not-allowed" : ""}`}
                 >
-                  <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${webVotingEnabled ? "translate-x-5" : "translate-x-0"}`} />
+                  <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${webVotingEnabled || poll?.source === "web" ? "translate-x-5" : "translate-x-0"}`} />
                 </button>
               </div>
-              {webVotingEnabled && (
+              {(webVotingEnabled || poll?.source === "web") && (
                 <div className="space-y-2">
                   <label className="text-xs text-gray-400 font-medium">Verification Group</label>
                   <p className="text-[11px] text-gray-500">Users must be members of this group to vote</p>

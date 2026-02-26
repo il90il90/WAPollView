@@ -10,9 +10,13 @@ export default function Step3CreatePoll({ group, onPollCreated, onBack }) {
   const [error, setError] = useState(null);
   const [multiSelect, setMultiSelect] = useState(false);
   const [maxSelections, setMaxSelections] = useState(0);
+  const [pollMode, setPollMode] = useState(group ? "whatsapp" : "web");
+
+  const isWebOnly = pollMode === "web" || !group;
+  const maxOptions = isWebOnly ? 100 : 12;
 
   const addOption = () => {
-    if (options.length >= 12) return;
+    if (options.length >= maxOptions) return;
     setOptions([...options, ""]);
   };
 
@@ -45,11 +49,12 @@ export default function Step3CreatePoll({ group, onPollCreated, onBack }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          groupJid: group.jid,
+          groupJid: group?.jid || null,
           title: title.trim(),
           description: description.trim() || null,
           options: cleanOptions,
           selectableCount: multiSelect ? (maxSelections || 0) : 1,
+          mode: isWebOnly ? "web" : "whatsapp",
         }),
       });
 
@@ -91,13 +96,71 @@ export default function Step3CreatePoll({ group, onPollCreated, onBack }) {
         <div>
           <h2 className="text-xl font-bold">Create Poll</h2>
           <p className="text-gray-400 text-sm">
-            Sending to{" "}
-            <span className="text-wa-green">{group?.name}</span>
+            {!group ? (
+              <span className="text-blue-400">Web-Only Poll</span>
+            ) : isWebOnly ? (
+              <>Web poll for <span className="text-blue-400">{group.name}</span></>
+            ) : (
+              <>Sending to <span className="text-wa-green">{group.name}</span></>
+            )}
           </p>
         </div>
       </div>
 
       <div className="card p-6 space-y-5">
+        {/* Poll Mode Toggle (only when a group is selected) */}
+        {group ? (
+          <div className="space-y-3">
+            <label className="block text-sm font-medium text-gray-300">Poll Mode</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setPollMode("whatsapp")}
+                className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl border text-sm font-medium transition-all ${
+                  pollMode === "whatsapp"
+                    ? "bg-wa-green/15 border-wa-green/50 text-wa-green"
+                    : "bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600"
+                }`}
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+                WhatsApp Poll
+              </button>
+              <button
+                type="button"
+                onClick={() => setPollMode("web")}
+                className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl border text-sm font-medium transition-all ${
+                  pollMode === "web"
+                    ? "bg-blue-500/15 border-blue-500/50 text-blue-400"
+                    : "bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600"
+                }`}
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                </svg>
+                Web-Only Poll
+              </button>
+            </div>
+            {isWebOnly && (
+              <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl px-4 py-3 text-xs text-blue-300 space-y-1">
+                <p className="font-medium">Web-Only Mode</p>
+                <p className="text-blue-400/80">This poll will only be available via the web UI (not sent to WhatsApp). No 12-option limit. Web voting will be auto-enabled. This choice is irreversible.</p>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl px-4 py-3 text-xs text-blue-300 space-y-1">
+            <div className="flex items-center gap-2 mb-1">
+              <svg className="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+              </svg>
+              <p className="font-medium text-sm text-blue-300">Web-Only Poll</p>
+            </div>
+            <p className="text-blue-400/80">This poll is independent of WhatsApp. No option limit. Voting via web UI only. Web voting will be auto-enabled.</p>
+          </div>
+        )}
+
         <div className="space-y-2">
           <label className="block text-sm font-medium text-gray-300">
             Poll Title
@@ -132,7 +195,7 @@ export default function Step3CreatePoll({ group, onPollCreated, onBack }) {
 
         <div className="space-y-3">
           <label className="block text-sm font-medium text-gray-300">
-            Options
+            Options <span className="text-gray-600 font-normal">({options.length}{!isWebOnly ? "/12" : ""})</span>
           </label>
           {options.map((opt, idx) => (
             <div key={idx} className="flex items-center gap-2">
@@ -173,7 +236,7 @@ export default function Step3CreatePoll({ group, onPollCreated, onBack }) {
             </div>
           ))}
 
-          {options.length < 12 && (
+          {options.length < maxOptions && (
             <button
               onClick={addOption}
               className="flex items-center gap-2 text-sm text-wa-green hover:text-wa-green/80 transition-colors"
@@ -244,7 +307,7 @@ export default function Step3CreatePoll({ group, onPollCreated, onBack }) {
         {sending ? (
           <>
             <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-            Sending...
+            {isWebOnly ? "Creating..." : "Sending..."}
           </>
         ) : (
           <>
@@ -254,14 +317,13 @@ export default function Step3CreatePoll({ group, onPollCreated, onBack }) {
               viewBox="0 0 24 24"
               stroke="currentColor"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
-              />
+              {isWebOnly ? (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+              )}
             </svg>
-            Launch Poll
+            {isWebOnly ? "Create Web Poll" : "Launch Poll"}
           </>
         )}
       </button>

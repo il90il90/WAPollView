@@ -103,8 +103,15 @@ export default function App() {
     setStep(3);
   }, []);
 
+  const handleNewWebPoll = useCallback(() => {
+    setSelectedGroup(null);
+    setSelectedPoll(null);
+    setStep(3);
+  }, []);
+
   const handlePollCreated = useCallback((poll) => {
     setSelectedPoll(poll);
+    if (poll.group) setSelectedGroup(poll.group);
     setStep(4);
   }, []);
 
@@ -391,7 +398,7 @@ export default function App() {
       <main className="flex-1 max-w-5xl w-full mx-auto px-4 py-6">
         {step === 1 && <Step1Auth socket={socket} waStatus={waStatus} />}
         {step === 2 && (
-          <Step2Groups socket={socket} onSelectPoll={handleSelectExistingPoll} onNewPoll={handleNewPoll} />
+          <Step2Groups socket={socket} onSelectPoll={handleSelectExistingPoll} onNewPoll={handleNewPoll} onNewWebPoll={handleNewWebPoll} />
         )}
         {step === 3 && (
           <Step3CreatePoll group={selectedGroup} onPollCreated={handlePollCreated} onBack={handleBack} />

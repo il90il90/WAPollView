@@ -177,54 +177,65 @@ module.exports = function (prisma) {
 
   router.post("/polls/create", async (req, res) => {
     try {
-      const { getSock } = require("../whatsapp");
-      const sock = getSock();
-      if (!sock) {
-        return res.status(503).json({ error: "WhatsApp not connected" });
+      const { groupJid, title, description, options, selectableCount, mode } = req.body;
+      const isWebOnly = mode === "web";
+
+      if (!isWebOnly && !groupJid) {
+        return res.status(400).json({ error: "groupJid is required for WhatsApp polls" });
+      }
+      if (!title || !options || options.length < 2) {
+        return res.status(400).json({ error: "title and at least 2 options required" });
       }
 
-      const { groupJid, title, description, options, selectableCount } = req.body;
-      if (!groupJid || !title || !options || options.length < 2) {
-        return res.status(400).json({
-          error: "groupJid, title, and at least 2 options required",
-        });
-      }
-
-      const selCount = Math.max(0, Math.min(selectableCount ?? 1, options.length));
-      const sentMsg = await sock.sendMessage(groupJid, {
-        poll: {
-          name: title,
-          values: options,
-          selectableCount: selCount,
-        },
-      });
-
-      const { proto } = require("@whiskeysockets/baileys");
       const { createHash } = require("crypto");
+      const selCount = Math.max(0, Math.min(selectableCount ?? 1, options.length));
 
-      const pollKeyStr = JSON.stringify({
-        remoteJid: sentMsg.key.remoteJid,
-        id: sentMsg.key.id,
-        participant: sentMsg.key.participant,
-      });
-
+      let pollKeyStr;
       let messageContent = null;
-      if (sentMsg.message) {
-        try {
-          messageContent = Buffer.from(
-            proto.Message.encode(sentMsg.message).finish()
-          ).toString("base64");
-        } catch (e) {
-          console.error("[API] Failed to encode sent message:", e.message);
+
+      if (isWebOnly) {
+        pollKeyStr = `web_poll_${crypto.randomUUID()}`;
+      } else {
+        const { getSock } = require("../whatsapp");
+        const sock = getSock();
+        if (!sock) {
+          return res.status(503).json({ error: "WhatsApp not connected" });
+        }
+
+        const sentMsg = await sock.sendMessage(groupJid, {
+          poll: {
+            name: title,
+            values: options,
+            selectableCount: selCount,
+          },
+        });
+
+        const { proto } = require("@whiskeysockets/baileys");
+
+        pollKeyStr = JSON.stringify({
+          remoteJid: sentMsg.key.remoteJid,
+          id: sentMsg.key.id,
+          participant: sentMsg.key.participant,
+        });
+
+        if (sentMsg.message) {
+          try {
+            messageContent = Buffer.from(
+              proto.Message.encode(sentMsg.message).finish()
+            ).toString("base64");
+          } catch (e) {
+            console.error("[API] Failed to encode sent message:", e.message);
+          }
         }
       }
 
+      const resolvedJid = groupJid || "web-polls@virtual";
       let group = await prisma.group.findUnique({
-        where: { jid: groupJid },
+        where: { jid: resolvedJid },
       });
       if (!group) {
         group = await prisma.group.create({
-          data: { jid: groupJid, name: groupJid },
+          data: { jid: resolvedJid, name: groupJid ? resolvedJid : "Web Polls" },
         });
       }
 
@@ -236,6 +247,7 @@ module.exports = function (prisma) {
           description: description || null,
           groupId: group.id,
           selectableCount: selCount,
+          source: isWebOnly ? "web" : "whatsapp",
           options: {
             create: options.map((optText) => ({
               optionText: optText,
@@ -248,7 +260,20 @@ module.exports = function (prisma) {
         include: { options: true, group: true },
       });
 
-      console.log(`[API] Poll created: "${title}" in ${groupJid}`);
+      // Auto-enable web voting for web-only polls
+      if (isWebOnly) {
+        await prisma.appSettings.upsert({
+          where: { key: "web_voting_enabled" },
+          update: { value: "true" },
+          create: { id: "web_voting_enabled", key: "web_voting_enabled", value: "true" },
+        });
+        const io = req.app.get("io");
+        if (io) {
+          io.emit("web_voting_settings_changed", { enabled: true, groupJid: null });
+        }
+      }
+
+      console.log(`[API] Poll created (${isWebOnly ? "web-only" : "whatsapp"}): "${title}" in ${groupJid}`);
       res.json(poll);
     } catch (err) {
       console.error("[API] /polls/create error:", err.message);
@@ -445,6 +470,29 @@ module.exports = function (prisma) {
     } catch (err) {
       console.error("[API] /polls/:pollId/declare-winner error:", err.message);
       res.status(500).json({ error: "Failed to declare winner" });
+    }
+  });
+
+  router.delete("/polls/:pollId", async (req, res) => {
+    try {
+      const { pollId } = req.params;
+      const poll = await prisma.poll.findUnique({ where: { id: pollId } });
+      if (!poll) return res.status(404).json({ success: false, error: "Poll not found" });
+
+      await prisma.voteLog.deleteMany({ where: { pollId } });
+      await prisma.pollOption.deleteMany({ where: { pollId } });
+      await prisma.poll.delete({ where: { id: pollId } });
+
+      const io = req.app.get("io");
+      if (io) {
+        io.emit("poll_deleted", { pollId, timestamp: Date.now() });
+      }
+
+      console.log(`[API] Poll deleted: ${pollId} ("${poll.title}")`);
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[API] DELETE /polls/:pollId error:", err.message);
+      res.status(500).json({ success: false, error: "Failed to delete poll" });
     }
   });
 
@@ -859,11 +907,6 @@ module.exports = function (prisma) {
     }
 
     try {
-      const enabledSetting = await prisma.appSettings.findUnique({ where: { key: "web_voting_enabled" } });
-      if (enabledSetting?.value !== "true") {
-        return res.status(403).json({ success: false, error: "Web voting is not enabled" });
-      }
-
       const session = await prisma.webVoterSession.findUnique({ where: { id: sessionId } });
       if (!session) {
         return res.status(404).json({ success: false, error: "Invalid session" });
@@ -876,7 +919,14 @@ module.exports = function (prisma) {
       if (!poll) return res.status(404).json({ success: false, error: "Poll not found" });
       if (poll.isLocked) return res.status(400).json({ success: false, error: "Poll is locked" });
 
-      if (Array.isArray(selectedOptions) && selectedOptions.length > poll.selectableCount) {
+      if (poll.source !== "web") {
+        const enabledSetting = await prisma.appSettings.findUnique({ where: { key: "web_voting_enabled" } });
+        if (enabledSetting?.value !== "true") {
+          return res.status(403).json({ success: false, error: "Web voting is not enabled" });
+        }
+      }
+
+      if (Array.isArray(selectedOptions) && poll.selectableCount > 0 && selectedOptions.length > poll.selectableCount) {
         return res.status(400).json({ success: false, error: `You can select at most ${poll.selectableCount} option(s)` });
       }
 
