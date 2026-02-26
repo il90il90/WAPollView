@@ -120,6 +120,8 @@ export default function ViewerMode({ socket, isConnected, onBack, onAdminClick }
   // Fetch current vote for this voter when poll loads
   useEffect(() => {
     if (!poll?.id || !voterSession) return;
+    setCurrentVote(null);
+    setSelectedOptions([]);
     (async () => {
       try {
         const res = await fetch(`${API_BASE}/api/polls/${poll.id}/votes`);

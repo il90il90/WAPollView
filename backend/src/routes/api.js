@@ -824,8 +824,18 @@ module.exports = function (prisma) {
       }
 
       // Resolve name from all available sources (cache, DB, VoteLog, sessions, business profile)
-      const { resolveContactName: resolveName } = require("../whatsapp");
+      const { resolveContactName: resolveName, getAdminPhone } = require("../whatsapp");
       let resolvedName = result.name || await resolveName(resolvedPhone);
+
+      // Guard: if resolved name matches admin's name but phone is different, don't trust it
+      const adminPhone = getAdminPhone();
+      if (resolvedName && adminPhone && resolvedPhone !== adminPhone) {
+        const adminSession = await prisma.webVoterSession.findFirst({ where: { phone: adminPhone }, select: { name: true } });
+        if (adminSession?.name && resolvedName === adminSession.name) {
+          console.log(`[API] Name "${resolvedName}" matches admin name but phone ${resolvedPhone} != admin ${adminPhone}, clearing`);
+          resolvedName = null;
+        }
+      }
 
       const session = await prisma.webVoterSession.create({
         data: {

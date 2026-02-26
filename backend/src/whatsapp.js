@@ -1082,9 +1082,13 @@ async function resolveContactName(phoneNum) {
         return session.name;
       }
 
-      // VoteLog (push names from WhatsApp poll votes)
+      // VoteLog (only WhatsApp-sourced push names are reliable)
       const vote = await prismaRef.voteLog.findFirst({
-        where: { voterPhone: phoneNum, voterName: { not: null } },
+        where: {
+          voterPhone: phoneNum,
+          voterName: { notIn: [null, "", "Unknown", "Anonymous"] },
+          source: "whatsapp",
+        },
         orderBy: { timestamp: "desc" },
         select: { voterName: true },
       });

@@ -2655,6 +2655,17 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
   }, [poll?.id, isViewer]);
 
   useEffect(() => {
+    setVotes([]);
+    setTotalVotes(0);
+    setUniqueVoters(0);
+    setVoteLog([]);
+    setFraudAlerts([]);
+    setFraudDetail(null);
+    setIsPollLocked(false);
+    setDeclaredWinner(null);
+    setDiceWinner(null);
+    setShowWinnerOverlay(false);
+    if (winnerFireworksRef.current) clearInterval(winnerFireworksRef.current);
     fetchData();
     refreshTimerRef.current = setInterval(fetchData, 8000);
     return () => clearInterval(refreshTimerRef.current);
