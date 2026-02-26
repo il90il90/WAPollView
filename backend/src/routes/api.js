@@ -901,7 +901,7 @@ module.exports = function (prisma) {
   });
 
   router.post("/web-vote/submit", async (req, res) => {
-    const { sessionId, pollId, selectedOptions } = req.body;
+    const { sessionId, pollId, selectedOptions, isAnonymous } = req.body;
     if (!sessionId || !pollId || !selectedOptions) {
       return res.status(400).json({ success: false, error: "sessionId, pollId, and selectedOptions required" });
     }
@@ -949,23 +949,26 @@ module.exports = function (prisma) {
         return res.json({ success: true, message: "Vote unchanged" });
       }
 
+      const anonymous = !!isAnonymous;
+
       await prisma.voteLog.create({
         data: {
           pollId,
           optionId: selectedTexts.length === 1 ? poll.options.find(o => o.optionText === selectedTexts[0])?.id : null,
           voterJid,
-          voterName: session.name,
+          voterName: anonymous ? "Anonymous" : session.name,
           voterPhone: session.phone,
           selectedOptionText: newSelection,
           source: "web",
           fingerprintId: session.fingerprintId,
           ipAddress: clientIp,
+          isAnonymous: anonymous,
         },
       });
 
       await prisma.webVoterSession.update({
         where: { id: sessionId },
-        data: { lastActiveAt: new Date() },
+        data: { lastActiveAt: new Date(), isAnonymous: anonymous },
       });
 
       const { getAggregatedVotes } = require("../whatsapp");
@@ -976,7 +979,7 @@ module.exports = function (prisma) {
           pollId,
           votes: aggregated.options,
           uniqueVoters: aggregated.uniqueVoters,
-          voter: { name: session.name, jid: voterJid, phone: session.phone },
+          voter: { name: anonymous ? "Anonymous" : session.name, jid: anonymous ? "anonymous@web" : voterJid, phone: anonymous ? null : session.phone, isAnonymous: anonymous },
           selectedOption: newSelection,
           source: "web",
           timestamp: Date.now(),
@@ -1094,6 +1097,22 @@ module.exports = function (prisma) {
     } catch (err) {
       console.error("[API] DELETE /web-sessions (all) error:", err.message);
       res.status(500).json({ error: "Failed to delete all sessions" });
+    }
+  });
+
+  router.patch("/web-sessions/:id/anonymous", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { isAnonymous } = req.body;
+      await prisma.webVoterSession.update({
+        where: { id },
+        data: { isAnonymous: !!isAnonymous },
+      });
+      res.json({ success: true });
+    } catch (err) {
+      console.error("[API] PATCH /web-sessions/:id/anonymous error:", err.message);
+      if (err.code === "P2025") return res.status(404).json({ error: "Session not found" });
+      res.status(500).json({ error: "Failed to update anonymous mode" });
     }
   });
 

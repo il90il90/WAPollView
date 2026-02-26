@@ -1004,7 +1004,7 @@ async function getAggregatedVotes(pollId, prisma) {
   let latestVotesPerUser = [];
   try {
     latestVotesPerUser = await prisma.$queryRaw`
-      SELECT DISTINCT ON ("voterJid") "voterJid", "voterName", "voterPhone", "selectedOptionText", "timestamp"
+      SELECT DISTINCT ON ("voterJid") "voterJid", "voterName", "voterPhone", "selectedOptionText", "isAnonymous", "timestamp"
       FROM "VoteLog"
       WHERE "pollId" = ${pollId}
       ORDER BY "voterJid", "timestamp" DESC
@@ -1029,9 +1029,10 @@ async function getAggregatedVotes(pollId, prisma) {
       optionText: opt.optionText,
       count: votersForOption.length,
       voters: votersForOption.map((v) => ({
-        jid: v.voterJid,
-        name: v.voterName || getContactName(v.voterJid) || null,
-        phone: v.voterPhone || jidToPhone(v.voterJid) || null,
+        jid: v.isAnonymous ? "anonymous@web" : v.voterJid,
+        name: v.isAnonymous ? "Anonymous" : (v.voterName || getContactName(v.voterJid) || null),
+        phone: v.isAnonymous ? null : (v.voterPhone || jidToPhone(v.voterJid) || null),
+        isAnonymous: !!v.isAnonymous,
       })),
     });
   }

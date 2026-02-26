@@ -31,6 +31,11 @@ export default function ViewerMode({ socket, isConnected, onBack, onAdminClick }
   const [currentVote, setCurrentVote] = useState(null);
   const [votes, setVotes] = useState([]);
   const [nameRequired, setNameRequired] = useState(false);
+  const [isAnonymous, setIsAnonymous] = useState(() => {
+    try {
+      return localStorage.getItem("webVoterAnonymous") === "true";
+    } catch { return false; }
+  });
   const [pendingSession, setPendingSession] = useState(null);
   const [nameInput, setNameInput] = useState("");
   const [nameSubmitting, setNameSubmitting] = useState(false);
@@ -293,6 +298,21 @@ export default function ViewerMode({ socket, isConnected, onBack, onAdminClick }
     });
   };
 
+  const toggleAnonymous = async () => {
+    const newVal = !isAnonymous;
+    setIsAnonymous(newVal);
+    localStorage.setItem("webVoterAnonymous", newVal ? "true" : "false");
+    if (voterSession?.sessionId) {
+      try {
+        await fetch(`${API_BASE}/api/web-sessions/${voterSession.sessionId}/anonymous`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ isAnonymous: newVal }),
+        });
+      } catch {}
+    }
+  };
+
   const handleSubmitVote = async () => {
     if (!voterSession?.sessionId || !poll?.id || selectedOptions.length === 0) return;
     setSubmittingVote(true);
@@ -304,6 +324,7 @@ export default function ViewerMode({ socket, isConnected, onBack, onAdminClick }
           sessionId: voterSession.sessionId,
           pollId: poll.id,
           selectedOptions,
+          isAnonymous,
         }),
       });
       if (res.status === 404 || res.status === 403) {
@@ -444,11 +465,21 @@ export default function ViewerMode({ socket, isConnected, onBack, onAdminClick }
           <div className="flex items-center gap-3 text-xs">
             {webVotingEnabled && voterSession && (
               <div className="flex items-center gap-2">
-                <span className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-orange-500/10 border border-orange-500/20 text-orange-300">
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                  </svg>
-                  {voterSession.name}
+                <span className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border ${
+                  isAnonymous
+                    ? "bg-purple-500/10 border-purple-500/20 text-purple-300"
+                    : "bg-orange-500/10 border-orange-500/20 text-orange-300"
+                }`}>
+                  {isAnonymous ? (
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                  )}
+                  {isAnonymous ? "Anonymous" : voterSession.name}
                 </span>
                 <button
                   onClick={handleLogoutSession}
@@ -508,15 +539,30 @@ export default function ViewerMode({ socket, isConnected, onBack, onAdminClick }
                 </button>
               </div>
             ) : (
-              <div className="card p-5 space-y-4">
+              <div className={`card p-5 space-y-4 transition-all ${isAnonymous ? "border-purple-500/30 bg-purple-500/5" : ""}`}>
+                {isAnonymous && (
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-purple-500/15 border border-purple-500/25">
+                    <svg className="w-4 h-4 text-purple-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span className="text-xs text-purple-300 font-medium">Anonymous Mode — your name will be hidden from other voters</span>
+                  </div>
+                )}
+
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-orange-500/20 flex items-center justify-center text-sm font-bold text-orange-400">
-                      {voterSession.name?.charAt(0)?.toUpperCase() || "?"}
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${isAnonymous ? "bg-purple-500/20 text-purple-400" : "bg-orange-500/20 text-orange-400"}`}>
+                      {isAnonymous ? (
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      ) : (
+                        voterSession.name?.charAt(0)?.toUpperCase() || "?"
+                      )}
                     </div>
                     <div>
-                      <p className="text-sm font-bold text-gray-200">{voterSession.name}</p>
-                      <p className="text-[11px] text-gray-500">+{voterSession.phone}</p>
+                      <p className="text-sm font-bold text-gray-200">{isAnonymous ? "Anonymous" : voterSession.name}</p>
+                      <p className="text-[11px] text-gray-500">{isAnonymous ? "Your identity is hidden" : `+${voterSession.phone}`}</p>
                     </div>
                   </div>
                   {voteSuccess && (
@@ -525,6 +571,33 @@ export default function ViewerMode({ socket, isConnected, onBack, onAdminClick }
                     </span>
                   )}
                 </div>
+
+                <button
+                  onClick={toggleAnonymous}
+                  className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl border transition-all ${
+                    isAnonymous
+                      ? "bg-purple-500/10 border-purple-500/30 hover:bg-purple-500/15"
+                      : "bg-gray-800/50 border-gray-700 hover:border-gray-600"
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
+                      isAnonymous ? "border-purple-400 bg-purple-500" : "border-gray-600"
+                    }`}>
+                      {isAnonymous && (
+                        <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </div>
+                    <span className={`text-xs font-medium ${isAnonymous ? "text-purple-300" : "text-gray-400"}`}>
+                      Vote anonymously
+                    </span>
+                  </div>
+                  {isAnonymous && (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 font-bold">ON</span>
+                  )}
+                </button>
 
                 <div className="space-y-2">
                   <p className="text-xs text-gray-400 font-medium">
@@ -539,12 +612,16 @@ export default function ViewerMode({ socket, isConnected, onBack, onAdminClick }
                         onClick={() => handleOptionToggle(opt.id)}
                         className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-left transition-all ${
                           isSelected
-                            ? "bg-orange-500/15 border-orange-500/50 text-orange-200"
+                            ? isAnonymous
+                              ? "bg-purple-500/15 border-purple-500/50 text-purple-200"
+                              : "bg-orange-500/15 border-orange-500/50 text-orange-200"
                             : "bg-gray-800/50 border-gray-700 text-gray-300 hover:border-gray-500 hover:bg-gray-800"
                         }`}
                       >
                         <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
-                          isSelected ? "border-orange-400 bg-orange-500" : "border-gray-600"
+                          isSelected
+                            ? isAnonymous ? "border-purple-400 bg-purple-500" : "border-orange-400 bg-orange-500"
+                            : "border-gray-600"
                         }`}>
                           {isSelected && (
                             <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -557,7 +634,7 @@ export default function ViewerMode({ socket, isConnected, onBack, onAdminClick }
                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-700 text-gray-400">previous</span>
                         )}
                         {isCurrentVote && isSelected && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-400">current</span>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${isAnonymous ? "bg-purple-500/20 text-purple-400" : "bg-orange-500/20 text-orange-400"}`}>current</span>
                         )}
                       </button>
                     );
@@ -567,9 +644,13 @@ export default function ViewerMode({ socket, isConnected, onBack, onAdminClick }
                 <button
                   onClick={handleSubmitVote}
                   disabled={submittingVote || selectedOptions.length === 0 || !hasVoteChanged}
-                  className="w-full py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed bg-orange-500 text-white hover:bg-orange-400 shadow-lg shadow-orange-500/20"
+                  className={`w-full py-3 rounded-xl text-sm font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-lg ${
+                    isAnonymous
+                      ? "bg-purple-500 text-white hover:bg-purple-400 shadow-purple-500/20"
+                      : "bg-orange-500 text-white hover:bg-orange-400 shadow-orange-500/20"
+                  }`}
                 >
-                  {submittingVote ? "Submitting..." : currentVote ? "Change Vote" : "Submit Vote"}
+                  {submittingVote ? "Submitting..." : currentVote ? "Change Vote" : isAnonymous ? "Submit Anonymous Vote" : "Submit Vote"}
                 </button>
               </div>
             )}

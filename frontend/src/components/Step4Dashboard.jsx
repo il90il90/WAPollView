@@ -399,8 +399,8 @@ function SplashBubble({ splash }) {
   const s = splash.shape || "circle";
 
   const nameLen = displayName.length;
-  const circleSize = Math.max(70, Math.min(160, 50 + nameLen * 7));
-  const circleFontSize = Math.max(11, Math.min(22, 22 - nameLen * 0.5));
+  const circleSize = Math.max(80, Math.min(200, 60 + nameLen * 10));
+  const circleFontSize = Math.max(10, Math.min(22, 24 - nameLen * 0.8));
   const choiceFontSize = Math.max(12, Math.min(18, 18 - nameLen * 0.3));
 
   const choiceBlock = (
@@ -3484,11 +3484,20 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
               <div className="bg-gray-800/50 rounded-xl p-4 space-y-3">
                 <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Identity</h4>
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-full bg-wa-green/20 flex items-center justify-center text-lg font-bold text-wa-green">
-                    {sessionDetail.name ? sessionDetail.name.charAt(0).toUpperCase() : "?"}
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold ${sessionDetail.isAnonymous ? "bg-purple-500/20 text-purple-400" : "bg-wa-green/20 text-wa-green"}`}>
+                    {sessionDetail.isAnonymous ? (
+                      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    ) : (
+                      sessionDetail.name ? sessionDetail.name.charAt(0).toUpperCase() : "?"
+                    )}
                   </div>
                   <div>
-                    <p className="text-lg font-bold text-white">{sessionDetail.name || "Unknown"}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-lg font-bold text-white">{sessionDetail.name || "Unknown"}</p>
+                      {sessionDetail.isAnonymous && <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 font-bold">ANONYMOUS</span>}
+                    </div>
                     <p className="text-sm text-gray-400">{sessionDetail.phone}</p>
                   </div>
                 </div>
@@ -3517,6 +3526,12 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
                   <div>
                     <p className="text-[10px] text-gray-500 uppercase">Last Active</p>
                     <p className="text-sm text-gray-300">{new Date(sessionDetail.lastActiveAt).toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-gray-500 uppercase">Anonymous Mode</p>
+                    <p className={`text-sm font-medium ${sessionDetail.isAnonymous ? "text-purple-400" : "text-gray-500"}`}>
+                      {sessionDetail.isAnonymous ? "Enabled" : "Disabled"}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -3776,6 +3791,7 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
                               <p className="text-sm font-bold text-white truncate">{session.name || "Unknown"}</p>
+                              {session.isAnonymous && <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 font-bold shrink-0">ANON</span>}
                               {hasVotes && <span className="text-[9px] px-1.5 py-0.5 rounded bg-wa-green/20 text-wa-green font-bold shrink-0">VOTED</span>}
                               {hasFraud && <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 font-bold animate-pulse shrink-0">FRAUD</span>}
                             </div>

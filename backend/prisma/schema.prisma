@@ -58,6 +58,7 @@ model VoteLog {
   source             String      @default("whatsapp")
   fingerprintId      String?
   ipAddress          String?
+  isAnonymous        Boolean     @default(false)
   timestamp          DateTime    @default(now())
 }
 
@@ -70,6 +71,7 @@ model WebVoterSession {
   fingerprintData String?
   userAgent       String?
   ipAddress       String?
+  isAnonymous     Boolean  @default(false)
   createdAt       DateTime @default(now())
   lastActiveAt    DateTime @default(now())
 
