@@ -2113,6 +2113,7 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
   const diceFaceRef = useRef(null);
   const winnerOverlayTimerRef = useRef(null);
   const winnerFireworksRef = useRef(null);
+  const winnerFireworksCountRef = useRef(0);
   const prevTotalRef = useRef(0);
   const [webSessions, setWebSessions] = useState([]);
   const [sessionDetail, setSessionDetail] = useState(null);
@@ -2120,11 +2121,27 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
   const [showUsersPanel, setShowUsersPanel] = useState(false);
   const [resettingPoll, setResettingPoll] = useState(false);
   const refreshTimerRef = useRef(null);
+  const fetchDebounceRef = useRef(null);
   const splashIdRef = useRef(0);
   const chartRef = useRef(null);
   const activeTemplate = isViewer ? (viewerTemplate || "classic") : template;
   const activeEffect = isViewer ? (viewerEffect || "confetti") : effect;
   const isMultiSelect = poll?.selectableCount !== 1;
+
+  const startWinnerFireworks = useCallback(() => {
+    if (winnerFireworksRef.current) clearInterval(winnerFireworksRef.current);
+    winnerFireworksCountRef.current = 0;
+    fireEffect("fireworks");
+    winnerFireworksRef.current = setInterval(() => {
+      winnerFireworksCountRef.current++;
+      if (winnerFireworksCountRef.current >= 10) {
+        clearInterval(winnerFireworksRef.current);
+        winnerFireworksRef.current = null;
+        return;
+      }
+      fireEffect("fireworks");
+    }, 3000);
+  }, []);
 
   const showVoteToast = useCallback((voterName, voterPhone, selectedOption) => {
     if (!selectedOption) return;
@@ -2215,10 +2232,8 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
     setDeclaredWinner(winnerName);
     setIsPollLocked(true);
     setShowWinnerOverlay(true);
-    fireEffect("fireworks");
-    setTimeout(() => fireEffect("confetti"), 600);
-    if (winnerFireworksRef.current) clearInterval(winnerFireworksRef.current);
-    winnerFireworksRef.current = setInterval(() => fireEffect("fireworks"), 3000);
+    fireEffect("confetti");
+    startWinnerFireworks();
     try {
       await fetch(`${API_BASE}/api/polls/${poll.id}/declare-winner`, {
         method: "POST",
@@ -2265,10 +2280,8 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
             setDeclaredWinner(prePickedWinner);
             setIsPollLocked(true);
             setShowWinnerOverlay(true);
-            fireEffect("fireworks");
-            setTimeout(() => fireEffect("confetti"), 600);
-            if (winnerFireworksRef.current) clearInterval(winnerFireworksRef.current);
-            winnerFireworksRef.current = setInterval(() => fireEffect("fireworks"), 3000);
+            fireEffect("confetti");
+            startWinnerFireworks();
           }, 800);
         } else {
           setTimeout(() => finalizeDeclareWinner(prePickedWinner), 800);
@@ -2609,14 +2622,12 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
         if (data.isLocked && data.winnerOption) {
           setDiceWinner(data.winnerOption);
           setShowWinnerOverlay(true);
-          fireEffect("fireworks");
-          setTimeout(() => fireEffect("confetti"), 600);
-          if (winnerFireworksRef.current) clearInterval(winnerFireworksRef.current);
-          winnerFireworksRef.current = setInterval(() => fireEffect("fireworks"), 3000);
+          fireEffect("confetti");
+          startWinnerFireworks();
         }
       })
       .catch(() => {});
-  }, [poll?.id]);
+  }, [poll?.id, startWinnerFireworks]);
 
   const fetchData = useCallback(async () => {
     if (!poll?.id) return;
@@ -2654,6 +2665,11 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
     }
   }, [poll?.id, isViewer]);
 
+  const debouncedFetchData = useCallback(() => {
+    if (fetchDebounceRef.current) clearTimeout(fetchDebounceRef.current);
+    fetchDebounceRef.current = setTimeout(() => fetchData(), 300);
+  }, [fetchData]);
+
   useEffect(() => {
     setVotes([]);
     setTotalVotes(0);
@@ -2665,6 +2681,14 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
     setDeclaredWinner(null);
     setDiceWinner(null);
     setShowWinnerOverlay(false);
+    setDiceRolling(false);
+    setDiceCountdown(null);
+    setDiceCurrentOption(null);
+    if (diceIntervalRef.current) clearInterval(diceIntervalRef.current);
+    if (diceCountdownRef.current) clearInterval(diceCountdownRef.current);
+    if (diceFaceRef.current) clearInterval(diceFaceRef.current);
+    if (diceTimeoutRef.current) clearTimeout(diceTimeoutRef.current);
+    if (winnerOverlayTimerRef.current) clearTimeout(winnerOverlayTimerRef.current);
     if (winnerFireworksRef.current) clearInterval(winnerFireworksRef.current);
     fetchData();
     refreshTimerRef.current = setInterval(fetchData, 8000);
@@ -2681,7 +2705,7 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
     };
     const handleVote = (data) => {
       if (data.pollId === poll.id) {
-        fetchData();
+        debouncedFetchData();
         if (data.voter && data.selectedOption) {
           showVoteToast(
             data.voter.name,
@@ -2692,9 +2716,9 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
       }
     };
     const handleChanged = (data) => {
-      if (data.pollId === poll.id) fetchData();
+      if (data.pollId === poll.id) debouncedFetchData();
     };
-    const handleHistorySync = () => fetchData();
+    const handleHistorySync = () => debouncedFetchData();
     const handlePollLocked = (data) => {
       if (data.pollId === poll.id) {
         setIsPollLocked(true);
@@ -2703,8 +2727,7 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
         setShowWinnerOverlay(true);
         fireEffect("fireworks");
         setTimeout(() => fireEffect("confetti"), 600);
-        if (winnerFireworksRef.current) clearInterval(winnerFireworksRef.current);
-        winnerFireworksRef.current = setInterval(() => fireEffect("fireworks"), 3000);
+        startWinnerFireworks();
       }
     };
     const handlePollReopened = (data) => {
@@ -2740,7 +2763,7 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
       socket.off("fraud_alert", handleFraudAlert);
       socket.emit("unsubscribe_from_poll", { pollId: poll.id });
     };
-  }, [socket, poll?.id, fetchData, showVoteToast]);
+  }, [socket, poll?.id, fetchData, debouncedFetchData, showVoteToast]);
 
   useEffect(() => {
     if (!socket) return;
@@ -2751,10 +2774,8 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
       setDeclaredWinner(data.winner);
       setIsPollLocked(true);
       setShowWinnerOverlay(true);
-      fireEffect("fireworks");
-      setTimeout(() => fireEffect("confetti"), 600);
-      if (winnerFireworksRef.current) clearInterval(winnerFireworksRef.current);
-      winnerFireworksRef.current = setInterval(() => fireEffect("fireworks"), 3000);
+      fireEffect("confetti");
+      startWinnerFireworks();
     };
     const handleDiceRoll = (data) => {
       if (!data?.options || !data?.winner) return;
@@ -2861,14 +2882,12 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
 
   useEffect(() => {
     if (isViewer && isPollLocked && declaredWinner) {
-      if (winnerFireworksRef.current) clearInterval(winnerFireworksRef.current);
-      fireEffect("fireworks");
-      winnerFireworksRef.current = setInterval(() => fireEffect("fireworks"), 3000);
+      startWinnerFireworks();
     }
     if (!isPollLocked) {
       if (winnerFireworksRef.current) clearInterval(winnerFireworksRef.current);
     }
-  }, [isViewer, isPollLocked, declaredWinner]);
+  }, [isViewer, isPollLocked, declaredWinner, startWinnerFireworks]);
 
   useEffect(() => {
     return () => {
@@ -3341,10 +3360,10 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
                 </thead>
                 <tbody>
                   {allVoters.map((v, i) => {
-                    const displayName = v.name || v.phone;
+                    const displayName = v.name || v.phone || "Unknown";
                     const initial = v.name
                       ? v.name.charAt(0).toUpperCase()
-                      : (v.phone.charAt(0) === "+" ? v.phone.charAt(1) : v.phone.charAt(0));
+                      : ((v.phone || "?").charAt(0) === "+" ? (v.phone || "?").charAt(1) : (v.phone || "?").charAt(0));
                     return (
                       <tr key={i} className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors">
                         <td className="py-2.5 px-4 text-xs text-gray-600">{i + 1}</td>

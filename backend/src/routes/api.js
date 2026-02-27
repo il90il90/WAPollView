@@ -550,9 +550,20 @@ module.exports = function (prisma) {
       const poll = await prisma.poll.findUnique({ where: { id: pollId } });
       if (!poll) return res.status(404).json({ success: false, error: "Poll not found" });
 
+      const webVoters = await prisma.voteLog.findMany({
+        where: { pollId, source: "web" },
+        distinct: ["voterPhone"],
+        select: { voterPhone: true },
+      });
+      const webPhones = webVoters.map(v => v.voterPhone).filter(Boolean);
+
       const deletedVotes = await prisma.voteLog.deleteMany({ where: { pollId } });
-      const deletedSessions = await prisma.webVoterSession.deleteMany({});
-      const deletedFraud = await prisma.fraudLog.deleteMany({});
+      const deletedSessions = webPhones.length > 0
+        ? await prisma.webVoterSession.deleteMany({ where: { phone: { in: webPhones } } })
+        : { count: 0 };
+      const deletedFraud = webPhones.length > 0
+        ? await prisma.fraudLog.deleteMany({ where: { phone: { in: webPhones } } })
+        : { count: 0 };
 
       await prisma.poll.update({
         where: { id: pollId },
@@ -876,6 +887,8 @@ module.exports = function (prisma) {
         where: { id: sessionId },
         data: { name: name.trim() },
       });
+      const { setContactName } = require("../whatsapp");
+      setContactName(session.phone + "@s.whatsapp.net", name.trim());
       console.log(`[API] Web voter name updated: session ${sessionId} -> "${name.trim()}"`);
       res.json({ success: true, name: name.trim() });
     } catch (err) {

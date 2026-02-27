@@ -271,10 +271,20 @@ async function handleHistorySet(data, prisma, io) {
   console.log(`[History] Received ${messages?.length || 0} messages, ${chats?.length || 0} chats, ${contacts?.length || 0} contacts`);
 
   if (contacts && contacts.length > 0) {
+    let mapped = 0;
     for (const c of contacts) {
       const name = c.notify || c.verifiedName || c.name || c.shortName;
+      const phoneJid = c.jid || (c.id && !c.id.includes("@lid") ? c.id : null);
+      const lidJid = c.lid || (c.id && c.id.includes("@lid") ? c.id : null);
+      if (name && phoneJid) setContactName(phoneJid, name);
+      if (name && lidJid) setContactName(lidJid, name);
       if (name && c.id) setContactName(c.id, name);
+      if (phoneJid && lidJid) {
+        mapLidToPhone(lidJid, phoneJid);
+        mapped++;
+      }
     }
+    console.log(`[Contacts] From history: ${contacts.length} contacts (${mapped} lid-mapped, names: ${contactNames.size}, lidMap: ${lidToPhone.size})`);
   }
 
   if (chats && chats.length > 0) {
@@ -463,6 +473,13 @@ async function handleMessagesUpdate(updates, prisma, io) {
 
               for (const voter of vote.voters) {
                 const normalizedVoter = (voter || voterJid).replace("@lid", "@s.whatsapp.net");
+                const existing = await prisma.voteLog.findFirst({
+                  where: { pollId: dbPoll.id, voterJid: normalizedVoter, selectedOptionText: optionName },
+                });
+                if (existing) {
+                  console.log(`[Vote] Skipped duplicate: ${normalizedVoter} -> "${optionName}" in "${dbPoll.title}"`);
+                  continue;
+                }
                 await prisma.voteLog.create({
                   data: { pollId: dbPoll.id, optionId: matchedOption?.id || null, voterJid: normalizedVoter, voterName: voterName || getContactName(normalizedVoter), voterPhone: voterPhone || jidToPhone(normalizedVoter), selectedOptionText: optionName },
                 });
@@ -596,24 +613,6 @@ async function initWhatsApp(io, prisma) {
       if (phoneJid && lidJid) {
         mapLidToPhone(lidJid, phoneJid);
       }
-    }
-  });
-
-  sock.ev.on("messaging-history.set", (data) => {
-    let mapped = 0;
-    if (data.contacts && data.contacts.length > 0) {
-      for (const c of data.contacts) {
-        const name = c.notify || c.verifiedName || c.name || c.shortName;
-        const phoneJid = c.jid || (c.id && !c.id.includes("@lid") ? c.id : null);
-        const lidJid = c.lid || (c.id && c.id.includes("@lid") ? c.id : null);
-        if (name && phoneJid) setContactName(phoneJid, name);
-        if (name && lidJid) setContactName(lidJid, name);
-        if (phoneJid && lidJid) {
-          mapLidToPhone(lidJid, phoneJid);
-          mapped++;
-        }
-      }
-      console.log(`[Contacts] From history: ${data.contacts.length} contacts (${mapped} lid-mapped, names: ${contactNames.size}, lidMap: ${lidToPhone.size})`);
     }
   });
 
@@ -1252,4 +1251,5 @@ module.exports = {
   resolveContactName,
   getAdminPhone,
   clearContactName,
+  setContactName,
 };
