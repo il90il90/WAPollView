@@ -3245,8 +3245,8 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
         </div>
       )}
 
-      {/* Web Voting Settings (Admin only) */}
-      {tab === "results" && !isViewer && (
+      {/* Web Voting Settings (Admin only, web-source polls) */}
+      {tab === "results" && !isViewer && poll?.source === "web" && (
         <div className="mt-3 pt-3 border-t border-gray-800">
           <button
             onClick={() => { setShowWebVotingSettings(!showWebVotingSettings); if (!showWebVotingSettings) fetchGroupsForWebVoting(); }}
