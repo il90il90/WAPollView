@@ -2090,6 +2090,13 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
   const [editingName, setEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState("");
   const nameInputRef = useRef(null);
+  const [pollDescription, setPollDescription] = useState(poll?.description || "");
+  const [editingDescription, setEditingDescription] = useState(false);
+  const [editDescValue, setEditDescValue] = useState("");
+  const descInputRef = useRef(null);
+  useEffect(() => {
+    if (poll?.description !== undefined) setPollDescription(poll.description || "");
+  }, [poll?.description]);
   const [template, setTemplate] = useState(() => localStorage.getItem("pollTemplate") || "classic");
   const [effect, setEffect] = useState(() => localStorage.getItem("pollEffect") || "confetti");
   const [showPdfModal, setShowPdfModal] = useState(false);
@@ -2604,6 +2611,30 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
     setEditingName(false);
   };
 
+  const handleStartEditDescription = () => {
+    setEditDescValue(pollDescription || "");
+    setEditingDescription(true);
+    setTimeout(() => descInputRef.current?.focus(), 50);
+  };
+
+  const handleSaveDescription = async () => {
+    const newDesc = editDescValue.trim();
+    if (newDesc === (pollDescription || "")) {
+      setEditingDescription(false);
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/api/polls/${poll.id}/description`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description: newDesc }),
+      });
+      const data = await res.json();
+      if (data.success) setPollDescription(data.description || "");
+    } catch {}
+    setEditingDescription(false);
+  };
+
   useEffect(() => {
     if (isViewer) return;
     fetch(`${API_BASE}/api/viewer-poll`)
@@ -2752,6 +2783,10 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
     socket.on("poll_locked", handlePollLocked);
     socket.on("poll_reopened", handlePollReopened);
     socket.on("fraud_alert", handleFraudAlert);
+    const handleDescriptionChanged = (data) => {
+      if (data.pollId === poll?.id) setPollDescription(data.description || "");
+    };
+    socket.on("poll_description_changed", handleDescriptionChanged);
 
     return () => {
       socket.off("connect", handleReconnect);
@@ -2761,6 +2796,7 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
       socket.off("poll_locked", handlePollLocked);
       socket.off("poll_reopened", handlePollReopened);
       socket.off("fraud_alert", handleFraudAlert);
+      socket.off("poll_description_changed", handleDescriptionChanged);
       socket.emit("unsubscribe_from_poll", { pollId: poll.id });
     };
   }, [socket, poll?.id, fetchData, debouncedFetchData, showVoteToast]);
@@ -2990,6 +3026,31 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
             <h2 className="text-lg font-bold truncate flex items-center gap-2">
               {poll?.title}
             </h2>
+            {!isViewer && editingDescription ? (
+              <textarea
+                ref={descInputRef}
+                value={editDescValue}
+                onChange={(e) => setEditDescValue(e.target.value)}
+                onBlur={handleSaveDescription}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSaveDescription(); } if (e.key === "Escape") setEditingDescription(false); }}
+                rows={2}
+                className="bg-gray-800 border border-gray-600 rounded px-2 py-1 text-xs text-gray-300 w-full max-w-[300px] outline-none focus:border-wa-green mt-0.5 resize-none"
+                placeholder="Add description..."
+              />
+            ) : (
+              <p
+                className={`text-gray-400 text-xs mt-0.5 ${!isViewer ? "cursor-pointer hover:text-gray-200 transition-colors" : ""}`}
+                onClick={!isViewer ? handleStartEditDescription : undefined}
+                title={!isViewer ? "Click to edit description" : undefined}
+              >
+                {pollDescription || (!isViewer ? <span className="text-gray-600 italic">Add description...</span> : null)}
+                {!isViewer && pollDescription && (
+                  <svg className="w-2.5 h-2.5 inline-block ml-1 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                )}
+              </p>
+            )}
             {!isViewer && editingName ? (
               <input
                 ref={nameInputRef}

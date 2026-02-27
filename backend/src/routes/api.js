@@ -514,6 +514,22 @@ module.exports = function (prisma) {
     }
   });
 
+  router.patch("/polls/:pollId/description", async (req, res) => {
+    try {
+      const { description } = req.body;
+      const poll = await prisma.poll.update({
+        where: { id: req.params.pollId },
+        data: { description: description || null },
+      });
+      const io = req.app.get("io");
+      if (io) io.emit("poll_description_changed", { pollId: poll.id, description: poll.description });
+      res.json({ success: true, description: poll.description });
+    } catch (err) {
+      console.error("[API] /polls/:pollId/description error:", err.message);
+      res.status(500).json({ error: "Failed to update description" });
+    }
+  });
+
   router.post("/admin/delete-polls", async (req, res) => {
     const { password } = req.body;
     try {
