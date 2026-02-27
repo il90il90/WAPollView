@@ -465,7 +465,7 @@ export default function ViewerMode({ socket, isConnected, onBack, onAdminClick }
             </h1>
           </div>
           <div className="flex items-center gap-3 text-xs">
-            {webVotingEnabled && voterSession && (
+            {poll?.source === "web" && webVotingEnabled && voterSession && (
               <div className="flex items-center gap-2">
                 <span className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border ${
                   isAnonymous
@@ -504,7 +504,7 @@ export default function ViewerMode({ socket, isConnected, onBack, onAdminClick }
       </header>
 
       <main className="flex-1 max-w-5xl w-full mx-auto px-4 py-6">
-        {(!webVotingEnabled || currentVote) && (
+        {(poll?.source !== "web" || !webVotingEnabled || currentVote) && (
           <Step4Dashboard
             socket={socket}
             poll={poll}
@@ -518,8 +518,8 @@ export default function ViewerMode({ socket, isConnected, onBack, onAdminClick }
           />
         )}
 
-        {/* Web Voting Panel */}
-        {webVotingEnabled && poll && !poll.isLocked && (
+        {/* Web Voting Panel (web-source polls only) */}
+        {poll?.source === "web" && webVotingEnabled && poll && !poll.isLocked && (
           <div className={currentVote ? "mt-6" : ""}>
             {!voterSession ? (
               <div className="card p-6 text-center space-y-4">
