@@ -2671,6 +2671,7 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
   }, [fetchData]);
 
   useEffect(() => {
+    if (fetchDebounceRef.current) clearTimeout(fetchDebounceRef.current);
     setVotes([]);
     setTotalVotes(0);
     setUniqueVoters(0);
@@ -2725,8 +2726,7 @@ export default function Step4Dashboard({ socket, poll, group, onBack, isViewer, 
         setDeclaredWinner(data.winner);
         setDiceWinner(data.winner);
         setShowWinnerOverlay(true);
-        fireEffect("fireworks");
-        setTimeout(() => fireEffect("confetti"), 600);
+        fireEffect("confetti");
         startWinnerFireworks();
       }
     };
